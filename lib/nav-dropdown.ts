@@ -24,6 +24,14 @@ export const navDropdownIconNames = [
   "music",
   "heart",
   "gamepad",
+  "newspaper",
+  "trending-up",
+  "trophy",
+  "headphones",
+  "clapperboard",
+  "wallet",
+  "search",
+  "calendar",
 ] as const;
 
 export type NavDropdownIconName = (typeof navDropdownIconNames)[number];
@@ -42,6 +50,14 @@ export const navDropdownIconLabels: Record<NavDropdownIconName, string> = {
   music: "音符",
   heart: "爱心",
   gamepad: "手柄",
+  newspaper: "报纸",
+  "trending-up": "趋势",
+  trophy: "奖杯",
+  headphones: "耳机",
+  clapperboard: "场记板",
+  wallet: "钱包",
+  search: "搜索",
+  calendar: "日历",
 };
 
 export interface NavDropdownLink {
