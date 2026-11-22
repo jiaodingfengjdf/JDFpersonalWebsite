@@ -3,15 +3,18 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useBackground } from "@/components/providers/BackgroundProvider";
+import { useTheme } from "@/components/providers/ThemeProvider";
+import { useThemePreset } from "@/components/providers/ThemePresetProvider";
 import { useEffects } from "@/components/providers/EffectProvider";
 import { useSiteSettings } from "@/components/providers/SiteSettingsProvider";
 import { bypassImageOptimization } from "@/lib/image";
 
 export default function SettingsPanel({ onClose: _onClose }: { onClose: () => void }) {
-  const { bgImage, bgBlur, setBgImage, setBgBlur } = useBackground();
+  const { bgImage, bgBlur, setBgImage, setBgBlur, images, useGradient } = useBackground();
+  const { theme, mode, setMode } = useTheme();
+  const { presets, active, presetId, setPresetId } = useThemePreset();
   const { clickEffect, mouseTrail, seasonalEffect, sparkleEffect, toggleClickEffect, toggleMouseTrail, toggleSeasonalEffect, toggleSparkleEffect } = useEffects();
   const { appearance } = useSiteSettings();
-  const images = appearance.bgImages;
   const currentIndex = images.indexOf(bgImage);
   const [showGrid, setShowGrid] = useState(false);
 
@@ -31,11 +34,92 @@ export default function SettingsPanel({ onClose: _onClose }: { onClose: () => vo
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">设置</h3>
       </div>
 
+      {/* 主题预设 */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            主题
+          </label>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {presetId === null ? `站点默认${active ? `·${active.name}` : ""}` : "自定义"}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setPresetId(null)}
+            className={`relative h-12 overflow-hidden rounded-lg border text-[11px] transition-all ${
+              presetId === null
+                ? "border-sky-500 ring-1 ring-sky-400"
+                : "border-slate-200/70 hover:border-sky-300 dark:border-white/10"
+            }`}
+            style={{
+              background:
+                active?.kind === "image"
+                  ? `url(${active.cover || active.images[0] || ""}) center/cover`
+                  : `linear-gradient(135deg, ${(active?.colors.length ? active.colors : appearance.themeColors).join(", ")})`,
+            }}
+            title="跟随站点默认主题"
+          >
+            <span className="absolute inset-0 bg-black/35" />
+            <span className="relative text-white">默认</span>
+          </button>
+
+          {presets.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => setPresetId(preset.id)}
+              className={`relative h-12 overflow-hidden rounded-lg border text-[11px] transition-all ${
+                presetId === preset.id
+                  ? "border-sky-500 ring-1 ring-sky-400"
+                  : "border-slate-200/70 hover:border-sky-300 dark:border-white/10"
+              }`}
+              style={{
+                background:
+                  preset.kind === "image"
+                    ? `url(${preset.cover || preset.images[0] || ""}) center/cover`
+                    : `linear-gradient(135deg, ${preset.colors.join(", ")})`,
+              }}
+              title={preset.description || preset.name}
+            >
+              <span className="absolute inset-0 bg-black/35" />
+              <span className="relative line-clamp-2 px-1 text-white">{preset.name}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-2 flex items-center gap-1 rounded-lg bg-slate-100/70 p-0.5 dark:bg-slate-800/60">
+          {(
+            [
+              ["auto", "跟随系统"],
+              ["light", "浅色"],
+              ["dark", "深色"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMode(value)}
+              className={`flex-1 rounded-md px-2 py-1 text-[11px] transition-colors ${
+                mode === value
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+              title={value === "auto" ? `当前系统：${theme === "dark" ? "深色" : "浅色"}` : undefined}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* 背景图片选择 */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            背景图片
+            {useGradient ? "背景（渐变主题）" : "背景图片"}
           </label>
           <button
             type="button"

@@ -107,3 +107,15 @@ ASSISTANT_SRC=/path/to/chatbot私人助理 node scripts/sync-assistant.mjs --dry
 脚本会：复制 `<源项目>/src` → `_app`、把三份全局 CSS 收敛成 `*.scoped.css`、把主题读写改到 `.assistant-root` 容器、
 改 CSS import、移除 `main.tsx`、重写 `override.css`，并在 `AssistantRuntime.tsx` / `page.tsx` 缺失时补出。
 上游改动导致某个补丁匹配不上时，脚本会列出警告并以非 0 退出，按提示人工确认即可。
+
+### 主题管理
+
+一套「主题」= 背景（渐变或图片）+ 明暗倾向（亮/暗/跟随系统）+ 模糊度。数据存在 `theme_preset` 表，
+同一时刻只有一行 `is_active = 1`（`0010_theme_preset.sql` 起，`0011_default_theme.sql` 把站点原有壁纸固化成默认主题）。
+
+- 后台：`/admin/themes`（导航「主题管理」）可新建、编辑、排序、删除、设为默认；启用中的主题不能删除，需先启用别的。
+- 公开接口：`GET /api/themes` 返回 `{ active, presets }`，前台布局在服务端读取后注入 `ThemePresetProvider`。
+- 管理接口：`GET/POST /api/admin/themes`、`PUT/DELETE /api/admin/themes/:id`、`POST /api/admin/themes/:id/activate`。
+- 前台切换：设置面板（导航栏齿轮）里选主题与明暗，选择只写浏览器 `localStorage`（`theme-preset` / `theme-mode`），不落库；
+  未选择时跟随站点默认主题，主题的 `mode` 会作为初始明暗倾向。
+- 背景渲染：`BackgroundProvider` 按当前主题给出 `images / gradientColors / blur`，`BackgroundRenderer` 只负责画出来。

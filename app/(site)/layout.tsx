@@ -1,6 +1,7 @@
 import { Geist_Mono } from "next/font/google";
 import "highlight.js/styles/vs2015.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { ThemePresetProvider } from "@/components/providers/ThemePresetProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { BackgroundProvider } from "@/components/providers/BackgroundProvider";
 import { MusicProvider } from "@/components/providers/MusicProvider";
@@ -18,6 +19,7 @@ import WelcomeScreen from "@/components/layout/WelcomeScreen";
 import VisitorTracker from "@/components/layout/VisitorTracker";
 import { WELCOME_SESSION_KEY } from "@/lib/welcome";
 import { loadSiteSettings } from "@/server/modules/site-settings";
+import { getThemesService } from "@/server/modules/themes";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -32,7 +34,11 @@ export default async function SiteLayout({
   // Site settings are read once per render here and handed to client components
   // through context, so the navbar, background and widgets all render the
   // admin-configured values on the first paint.
-  const settings = await loadSiteSettings();
+  const [settings, themes] = await Promise.all([
+    loadSiteSettings(),
+    getThemesService().listPublic(),
+  ]);
+  const bootMode = themes.active?.mode ?? "auto";
 
   return (
     <SiteSettingsProvider value={settings}>
@@ -43,10 +49,11 @@ export default async function SiteLayout({
       */}
       <script
         dangerouslySetInnerHTML={{
-          __html: `try{var s=sessionStorage.getItem(${JSON.stringify(WELCOME_SESSION_KEY)});if(s){document.documentElement.classList.add("welcome-seen")}else{sessionStorage.setItem(${JSON.stringify(WELCOME_SESSION_KEY)},"1")}}catch(e){}try{var t=localStorage.getItem("theme");if(!t){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.dataset.theme=t;}catch(e){}`,
+          __html: `try{var s=sessionStorage.getItem(${JSON.stringify(WELCOME_SESSION_KEY)});if(s){document.documentElement.classList.add("welcome-seen")}else{sessionStorage.setItem(${JSON.stringify(WELCOME_SESSION_KEY)},"1")}}catch(e){}try{var t=localStorage.getItem("theme-mode")||${JSON.stringify(bootMode)};if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.dataset.theme=t;localStorage.setItem("theme",t);}catch(e){}`,
         }}
       />
-      <ThemeProvider>
+      <ThemePresetProvider active={themes.active} presets={themes.presets}>
+        <ThemeProvider>
         <EffectProvider>
           {process.env.WELCOME_DISABLED === "1" ? null : <WelcomeScreen />}
         <BackgroundProvider>
@@ -70,7 +77,8 @@ export default async function SiteLayout({
           </MusicProvider>
         </BackgroundProvider>
       </EffectProvider>
-      </ThemeProvider>
+        </ThemeProvider>
+      </ThemePresetProvider>
     </SiteSettingsProvider>
   );
 }

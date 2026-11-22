@@ -20,5 +20,6 @@ export { postDraft, postRevision } from "./post-revision";
 export { project } from "./project";
 export { siteConfig } from "./site-config";
 export { tag } from "./tag";
+export { themePreset } from "./theme";
 export { user } from "./user";
 export { visitor } from "./visitor";

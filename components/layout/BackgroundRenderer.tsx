@@ -1,19 +1,17 @@
 "use client";
 
 import { useBackground } from "@/components/providers/BackgroundProvider";
-import { useSiteSettings } from "@/components/providers/SiteSettingsProvider";
 
 export default function BackgroundRenderer() {
-  const { bgImage, bgBlur } = useBackground();
-  const { appearance } = useSiteSettings();
+  const { bgImage, bgBlur, useGradient, gradientColors } = useBackground();
 
   return (
     <div className="fixed inset-0 -z-10 h-lvh">
-      {appearance.useGradient ? (
+      {useGradient ? (
         <div
           className="absolute inset-0 gradient-background"
           style={{
-            backgroundImage: `linear-gradient(135deg, ${appearance.themeColors.join(", ")})`,
+            backgroundImage: `linear-gradient(135deg, ${gradientColors.join(", ")})`,
           }}
         />
       ) : (
@@ -21,7 +19,7 @@ export default function BackgroundRenderer() {
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{
-              backgroundImage: `url(${bgImage || appearance.bgImages[0]})`,
+              backgroundImage: `url(${bgImage})`,
             }}
           />
           {/* 深色模式遮罩 */}
