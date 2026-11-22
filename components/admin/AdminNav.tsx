@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   UserRound,
   Users,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ const primaryItems = [
   { href: "/admin/messages", label: "留言", icon: MessageSquare },
   { href: "/admin/taxonomy", label: "分类 / 标签", icon: FolderOpen },
   { href: "/admin/friend-links", label: "友链", icon: Link2 },
+  { href: "/admin/ledger", label: "记账", icon: Wallet },
   { href: "/admin/collection", label: "收藏", icon: Bookmark },
   { href: "/admin/bookmarks", label: "收藏分类", icon: FolderOpen },
   { href: "/admin/albums", label: "相册", icon: Images },
