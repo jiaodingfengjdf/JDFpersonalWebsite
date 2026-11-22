@@ -4,6 +4,7 @@ export { bookmarkCategory, bookmarkSite } from "./bookmark";
 export { collectionItem } from "./collection";
 export { ledgerAccount, ledgerBudget, ledgerCategory, ledgerTxn } from "./ledger";
 export { marketSnapshot, marketWatch } from "./market";
+export { feedItem, feedSource } from "./feed";
 export { category } from "./category";
 export { chatter, chatterComment } from "./chatter";
 export { comment } from "./comment";

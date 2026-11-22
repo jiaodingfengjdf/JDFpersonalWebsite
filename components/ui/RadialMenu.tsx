@@ -31,6 +31,7 @@ const navItems = [
   { href: "/music", label: "音乐", icon: Music },
   { href: "/ledger", label: "记账", icon: Wallet },
   { href: "/market", label: "行情", icon: TrendingUp },
+  { href: "/news", label: "新闻", icon: Newspaper },
 ];
 
 export default function RadialMenu() {
