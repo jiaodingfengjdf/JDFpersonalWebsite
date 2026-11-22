@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="wood" x1="0" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#c8792f"/>
+      <stop offset="0.45" stop-color="#b4611f"/>
+      <stop offset="1" stop-color="#8f4713"/>
+    </linearGradient>
+    <linearGradient id="light" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.22"/>
+    </linearGradient>
+    <pattern id="planks" width="160" height="1080" patternUnits="userSpaceOnUse">
+      <rect width="160" height="1080" fill="url(#wood)"/>
+      <path d="M159 0V1080" stroke="#6f360c" stroke-opacity="0.35" stroke-width="2"/>
+      <path d="M40 0V1080" stroke="#e0a566" stroke-opacity="0.08" stroke-width="1"/>
+      <path d="M110 0V1080" stroke="#6f360c" stroke-opacity="0.16" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#planks)"/>
+  <rect width="1920" height="1080" fill="url(#light)"/>
+
+  <g fill="none" stroke="#f7f4ee" stroke-opacity="0.5" stroke-width="6">
+    <!-- 边线 -->
+    <rect x="120" y="70" width="1680" height="940"/>
+    <!-- 中线与中圈 -->
+    <path d="M960 70V1010"/>
+    <circle cx="960" cy="540" r="150"/>
+    <!-- 两侧禁区 -->
+    <rect x="120" y="310" width="360" height="460"/>
+    <rect x="1440" y="310" width="360" height="460"/>
+    <!-- 罚球圈 -->
+    <path d="M480 540a120 120 0 0 1 0 0"/>
+    <circle cx="480" cy="540" r="120"/>
+    <circle cx="1440" cy="540" r="120"/>
+    <!-- 三分弧 -->
+    <path d="M120 140a430 430 0 0 1 0 800"/>
+    <path d="M1800 140a430 430 0 0 0 0 800"/>
+  </g>
+
+  <g fill="none" stroke="#f7f4ee" stroke-opacity="0.28" stroke-width="3">
+    <rect x="160" y="350" width="280" height="380"/>
+    <rect x="1480" y="350" width="280" height="380"/>
+  </g>
+
+  <!-- 球 -->
+  <g transform="translate(1560 300)">
+    <circle r="46" fill="#e2621b"/>
+    <circle r="46" fill="none" stroke="#7c2f06" stroke-width="4"/>
+    <path d="M-46 0H46M0 -46V46" stroke="#7c2f06" stroke-width="4"/>
+    <path d="M-33 -33a46 46 0 0 1 66 0M-33 33a46 46 0 0 0 66 0" fill="none" stroke="#7c2f06" stroke-width="4"/>
+  </g>
+</svg>

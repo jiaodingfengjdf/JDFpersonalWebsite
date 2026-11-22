@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" shape-rendering="crispEdges">
+  <defs>
+    <pattern id="px" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#1b2a6b"/>
+    </pattern>
+  </defs>
+
+  <!-- 像素天空：分带渐层 -->
+  <rect width="1920" height="1080" fill="#14205c"/>
+  <rect y="0"    width="1920" height="180" fill="#0b1440"/>
+  <rect y="180"  width="1920" height="120" fill="#101a52"/>
+  <rect y="300"  width="1920" height="120" fill="#16225f"/>
+  <rect y="420"  width="1920" height="120" fill="#1d2c70"/>
+  <rect y="540"  width="1920" height="120" fill="#25357f"/>
+  <rect y="660"  width="1920" height="120" fill="#2e418e"/>
+  <rect y="780"  width="1920" height="120" fill="#39509c"/>
+  <rect y="900"  width="1920" height="180" fill="#455fae"/>
+
+  <!-- 像素星点 -->
+  <g fill="#f5f7ff">
+    <rect x="120" y="90" width="12" height="12" opacity="0.9"/>
+    <rect x="300" y="60" width="12" height="12" opacity="0.6"/>
+    <rect x="520" y="150" width="12" height="12" opacity="0.8"/>
+    <rect x="760" y="80" width="12" height="12" opacity="0.5"/>
+    <rect x="980" y="130" width="12" height="12" opacity="0.85"/>
+    <rect x="1240" y="70" width="12" height="12" opacity="0.55"/>
+    <rect x="1480" y="140" width="12" height="12" opacity="0.8"/>
+    <rect x="1700" y="90" width="12" height="12" opacity="0.65"/>
+    <rect x="1820" y="200" width="12" height="12" opacity="0.5"/>
+  </g>
+
+  <!-- 像素月 -->
+  <g fill="#ffe9a8">
+    <rect x="1580" y="180" width="120" height="24"/>
+    <rect x="1560" y="204" width="168" height="24"/>
+    <rect x="1540" y="228" width="192" height="48"/>
+    <rect x="1560" y="276" width="168" height="24"/>
+    <rect x="1580" y="300" width="120" height="24"/>
+  </g>
+
+  <!-- 像素云 -->
+  <g fill="#e8efff" opacity="0.85">
+    <g transform="translate(240 360)">
+      <rect width="96" height="24"/><rect x="24" y="-24" width="72" height="24"/>
+      <rect x="-24" y="24" width="144" height="24"/><rect x="24" y="48" width="96" height="12" opacity="0.6"/>
+    </g>
+    <g transform="translate(1180 300)">
+      <rect width="72" height="24"/><rect x="24" y="-24" width="48" height="24"/>
+      <rect x="-24" y="24" width="120" height="24"/><rect x="12" y="48" width="72" height="12" opacity="0.6"/>
+    </g>
+  </g>
+
+  <!-- 像素山 -->
+  <g>
+    <path d="M0 780h240v-48h120v-48h120v48h120v48h120V1080H0z" fill="#1f5d4a"/>
+    <path d="M0 852h360v-60h120v60h120v48H0z" fill="#16493a"/>
+    <path d="M1320 1080v-120h120v-60h120v60h120v-60h120v60h120v120z" fill="#1f5d4a"/>
+    <path d="M1080 1080v-96h120v-48h120v48h120v96z" fill="#16493a"/>
+  </g>
+
+  <!-- 像素草地 -->
+  <g fill="#2f8f5b">
+    <rect y="960" width="1920" height="120"/>
+  </g>
+  <g fill="#3fb46f">
+    <rect y="960" width="1920" height="24"/>
+    <rect x="120" y="984" width="24" height="12"/><rect x="360" y="996" width="24" height="12"/>
+    <rect x="720" y="984" width="24" height="12"/><rect x="1080" y="996" width="24" height="12"/>
+    <rect x="1440" y="984" width="24" height="12"/><rect x="1740" y="996" width="24" height="12"/>
+  </g>
+
+  <!-- 像素闪光 -->
+  <g fill="#fff6c9">
+    <rect x="880" y="620" width="12" height="36"/><rect x="868" y="632" width="36" height="12"/>
+    <rect x="300" y="700" width="12" height="24"/><rect x="294" y="706" width="24" height="12"/>
+  </g>
+</svg>

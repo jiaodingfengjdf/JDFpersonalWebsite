@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode, useMemo } from "react";
 import { useSiteSettings } from "@/components/providers/SiteSettingsProvider";
 import { useThemePreset } from "@/components/providers/ThemePresetProvider";
 
@@ -51,10 +51,15 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
   const [bgImage, setBgImage] = useState(images[images.length - 1] ?? "");
   const [bgBlur, setBgBlur] = useState(current?.blur ?? 20);
   const [mounted, setMounted] = useState(false);
+  /** 记住上一次的主题，切换主题时按新主题的默认模糊度走，而不是沿用旧值。 */
+  const presetRef = useRef<number | null>(current?.id ?? null);
 
   // Restore persisted preferences after hydration; server render uses defaults.
   /* eslint-disable react-hooks/set-state-in-effect -- restore persisted client preferences after hydration */
   useEffect(() => {
+    const presetChanged = presetRef.current !== (current?.id ?? null);
+    presetRef.current = current?.id ?? null;
+
     let savedImg: string | null = null;
     let savedBlur: string | null = null;
     try {
@@ -66,7 +71,8 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
     }
 
     setBgImage(savedImg && images.includes(savedImg) ? savedImg : (images[images.length - 1] ?? ""));
-    setBgBlur(savedBlur ? Number(savedBlur) : (current?.blur ?? 20));
+    // 换主题时应用该主题自带的模糊度；否则沿用访客手动调过的值。
+    setBgBlur(!presetChanged && savedBlur ? Number(savedBlur) : (current?.blur ?? 20));
     setMounted(true);
   }, [images, current]);
   /* eslint-enable react-hooks/set-state-in-effect */

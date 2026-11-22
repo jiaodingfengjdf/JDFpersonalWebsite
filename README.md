@@ -108,7 +108,7 @@ ASSISTANT_SRC=/path/to/chatbot私人助理 node scripts/sync-assistant.mjs --dry
 改 CSS import、移除 `main.tsx`、重写 `override.css`，并在 `AssistantRuntime.tsx` / `page.tsx` 缺失时补出。
 上游改动导致某个补丁匹配不上时，脚本会列出警告并以非 0 退出，按提示人工确认即可。
 
-### 主题管理
+- 内置风格：原生壁纸、樱色晚霞、深海夜航、薄荷晴空、机甲黄昏、雪见夜空、黑客程序员、NBA 球场、绿色养眼、像素 8bit（后四套的壁纸在 public/theme/*.svg）。
 
 一套「主题」= 背景（渐变或图片）+ 明暗倾向（亮/暗/跟随系统）+ 模糊度。数据存在 `theme_preset` 表，
 同一时刻只有一行 `is_active = 1`（`0010_theme_preset.sql` 起，`0011_default_theme.sql` 把站点原有壁纸固化成默认主题）。
