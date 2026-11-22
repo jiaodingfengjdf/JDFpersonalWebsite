@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
   BookOpen,
+  Headphones,
   MessageSquare,
   Newspaper,
   FolderGit2,
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/digest", label: "简报", icon: CalendarDays },
   { href: "/nba", label: "NBA", icon: Trophy },
   { href: "/library", label: "书架", icon: BookOpen },
+  { href: "/podcast", label: "播客", icon: Headphones },
 ];
 
 export default function RadialMenu() {

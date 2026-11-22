@@ -7,6 +7,7 @@ export { marketSnapshot, marketWatch } from "./market";
 export { feedItem, feedSource } from "./feed";
 export { nbaGame, nbaTeam } from "./nba";
 export { libraryBook, libraryProgress } from "./library";
+export { podcastEpisode, podcastShow } from "./podcast";
 export { category } from "./category";
 export { chatter, chatterComment } from "./chatter";
 export { comment } from "./comment";
