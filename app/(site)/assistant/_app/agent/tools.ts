@@ -35,6 +35,11 @@ function fail(content: string, data?: unknown): ToolResult {
   return data === undefined ? { ok: false, content } : { ok: false, content, data };
 }
 
+/** 接口返回的数组字段可能是 undefined，统一成一个安全数组。 */
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 /** 把任意异常转成一句可读的中文原因。 */
 function errorText(err: unknown): string {
   if (err instanceof Error) return err.message || err.name;
@@ -432,6 +437,119 @@ const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
           title: page.title,
           chars: body.length,
         });
+      }),
+  },
+
+  site_query: {
+    schema: {
+      name: 'site_query',
+      description:
+        '查询用户自己站点上的数据：行情（自选基金/股票/指数）、账本（本月收支）、收藏、新闻、NBA 赛程、每日简报。用户问「我的基金怎么样」「这个月花了多少」「今天有什么新闻」「今天有比赛吗」这类问题时调用。账本需要站点处于管理员登录状态，未登录会返回提示。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          resource: {
+            type: 'string',
+            enum: ['digest', 'market', 'ledger', 'collection', 'news', 'nba'],
+            description: '要查询的资源类型。',
+          },
+          limit: {
+            type: 'number',
+            description: '可选，最多返回多少条，默认 8，最大 20。',
+          },
+        },
+        required: ['resource'],
+      },
+    },
+    run: (input) =>
+      guard('查询站点数据', async () => {
+        const resource = readString(input, 'resource');
+        const limitRaw = Number(input.limit);
+        const limit = Number.isFinite(limitRaw) ? Math.min(20, Math.max(1, limitRaw)) : 8;
+        const endpoints: Record<string, string> = {
+          digest: '/api/digest',
+          market: '/api/market',
+          ledger: '/api/admin/ledger/summary',
+          collection: `/api/collection?size=${limit}`,
+          news: `/api/news?limit=${limit}`,
+          nba: '/api/nba',
+        };
+        const path = endpoints[resource];
+        if (!path) {
+          return fail(`不支持的资源「${resource}」，可选：${Object.keys(endpoints).join(', ')}`);
+        }
+
+        const response = await fetch(path, { credentials: 'include' });
+        if (!response.ok) {
+          return fail(
+            response.status === 401
+              ? '需要先在站点后台登录管理员，才能查账本等私人数据。'
+              : `站点接口返回 HTTP ${response.status}`,
+          );
+        }
+        const data = (await response.json()) as Record<string, unknown>;
+
+        const lines: string[] = [];
+        if (resource === 'market') {
+          const items = asArray<Record<string, unknown>>(data.items);
+          for (const item of items.slice(0, limit)) {
+            lines.push(
+              `- ${item.name}：${item.price}（${Number(item.change_pct) >= 0 ? '+' : ''}${item.change_pct}%）${item.stale ? ' 缓存' : ''}`,
+            );
+          }
+        } else if (resource === 'ledger') {
+          lines.push(
+            `- ${data.month} 收入 ${data.income}，支出 ${data.expense}，结余 ${data.balance}`,
+          );
+          const categories = asArray<Record<string, unknown>>(data.by_category).slice(0, limit);
+          for (const item of categories) {
+            lines.push(`- ${item.category_name}（${item.kind}）：${item.total}`);
+          }
+        } else if (resource === 'collection') {
+          for (const item of asArray<Record<string, unknown>>(data.items).slice(0, limit)) {
+            lines.push(`- ${item.title}（${item.kind} / ${item.status}）`);
+          }
+        } else if (resource === 'news') {
+          for (const item of asArray<Record<string, unknown>>(data.items).slice(0, limit)) {
+            lines.push(`- ${item.title} —— ${item.source_name}`);
+          }
+        } else if (resource === 'nba') {
+          const games = asArray<Record<string, unknown>>(data.games);
+          for (const game of games.slice(0, limit)) {
+            lines.push(
+              `- ${game.away_name} @ ${game.home_name}：${
+                game.status === 'scheduled' ? '未开始' : `${game.away_score}-${game.home_score}`
+              }${game.follow ? '（关注）' : ''}`,
+            );
+          }
+        } else {
+          const ledger = data.ledger as Record<string, unknown> | null;
+          if (ledger) {
+            lines.push(
+              `- 账本 ${ledger.month}：收入 ${ledger.income}，支出 ${ledger.expense}，结余 ${ledger.balance}`,
+            );
+          }
+          const market = asArray<Record<string, unknown>>(data.market).slice(0, 4);
+          if (market.length > 0) {
+            lines.push(
+              `- 行情：${market.map((item) => `${item.name} ${item.price}（${Number(item.change_pct) >= 0 ? '+' : ''}${item.change_pct}%）`).join('；')}`,
+            );
+          }
+          const games = asArray<Record<string, unknown>>(data.nba).slice(0, 3);
+          if (games.length > 0) {
+            lines.push(
+              `- NBA：${games.map((game) => `${game.away_name}@${game.home_name}${game.status === 'scheduled' ? '' : ` ${game.away_score}-${game.home_score}`}`).join('；')}`,
+            );
+          }
+          const news = asArray<Record<string, unknown>>(data.news).slice(0, 5);
+          if (news.length > 0) {
+            lines.push('- 新闻：');
+            for (const item of news) lines.push(`  - ${item.title}（${item.source}）`);
+          }
+        }
+
+        if (lines.length === 0) return ok('查询成功，但站点上还没有对应的数据。');
+        return ok(lines.slice(0, MAX_LINES + 6).join('\n'), { resource });
       }),
   },
 

@@ -17,6 +17,7 @@ import {
   Trophy,
   Wallet,
   Bookmark,
+  CalendarDays,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/ledger", label: "记账", icon: Wallet },
   { href: "/market", label: "行情", icon: TrendingUp },
   { href: "/news", label: "新闻", icon: Newspaper },
+  { href: "/digest", label: "简报", icon: CalendarDays },
   { href: "/nba", label: "NBA", icon: Trophy },
 ];
 
