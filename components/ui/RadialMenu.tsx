@@ -8,6 +8,7 @@ import {
   BookOpen,
   Headphones,
   Clapperboard,
+  Gamepad2,
   MessageSquare,
   Newspaper,
   FolderGit2,
@@ -41,6 +42,7 @@ const navItems = [
   { href: "/library", label: "书架", icon: BookOpen },
   { href: "/podcast", label: "播客", icon: Headphones },
   { href: "/watch", label: "影视", icon: Clapperboard },
+  { href: "/games", label: "游戏", icon: Gamepad2 },
 ];
 
 export default function RadialMenu() {
