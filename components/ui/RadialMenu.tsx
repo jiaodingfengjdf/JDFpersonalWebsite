@@ -36,6 +36,7 @@ const navItems = [
   { href: "/news", label: "新闻", icon: Newspaper },
   { href: "/digest", label: "简报", icon: CalendarDays },
   { href: "/nba", label: "NBA", icon: Trophy },
+  { href: "/library", label: "书架", icon: BookOpen },
 ];
 
 export default function RadialMenu() {

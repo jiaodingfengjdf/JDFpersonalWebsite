@@ -6,6 +6,7 @@ export { ledgerAccount, ledgerBudget, ledgerCategory, ledgerTxn } from "./ledger
 export { marketSnapshot, marketWatch } from "./market";
 export { feedItem, feedSource } from "./feed";
 export { nbaGame, nbaTeam } from "./nba";
+export { libraryBook, libraryProgress } from "./library";
 export { category } from "./category";
 export { chatter, chatterComment } from "./chatter";
 export { comment } from "./comment";
