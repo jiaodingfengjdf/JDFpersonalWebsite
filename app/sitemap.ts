@@ -23,7 +23,6 @@ const STATIC_ROUTES: Array<{
   { path: "/photowall", changeFrequency: "monthly", priority: 0.7 },
   { path: "/timeline", changeFrequency: "monthly", priority: 0.7 },
   { path: "/music", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/about", changeFrequency: "yearly", priority: 0.5 },
   // /garden 需要密码才能进入，未解锁时服务端渲染的是空壳。
   // 收录它等于给爬虫一个永远空白的页面，所以不进 sitemap。
 ];

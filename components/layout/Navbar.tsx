@@ -16,7 +16,6 @@ import {
   Camera,
   Clock,
   Music,
-  User,
   Sun,
   Moon,
   Menu,
@@ -62,7 +61,6 @@ const navLinks: NavLink[] = [
   { href: "/timeline", label: "归档", icon: Clock },
   { href: "/music", label: "音乐", icon: Music },
   { href: "/assistant", label: "助理", icon: Sparkles },
-  { href: "/about", label: "关于", icon: User },
 ];
 
 /**

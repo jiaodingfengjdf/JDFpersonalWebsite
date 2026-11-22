@@ -477,7 +477,7 @@ function SiteSettingsEditor({
             <Field
               id="author-name"
               label="昵称"
-              hint="显示在导航栏 logo、关于页与 RSS 作者。"
+              hint="显示在导航栏 logo 与 RSS 作者。"
             >
               <Input
                 id="author-name"
