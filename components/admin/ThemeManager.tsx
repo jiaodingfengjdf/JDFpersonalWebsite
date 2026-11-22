@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Check, ImagePlus, Pencil, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import AdminEmptyState from "./AdminEmptyState";
 import AdminError from "./AdminError";
 import AdminPageHeader from "./AdminPageHeader";
+import ImageUploader from "./ImageUploader";
 import { useConfirm } from "./ConfirmProvider";
 import { adminRequest, describeAdminError } from "./admin-api";
 import { useAdminData } from "./use-admin-data";
@@ -12,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type { ThemePresetItem } from "@/server/modules/themes/contracts";
 
 type Mode = "light" | "dark" | "auto";
@@ -71,6 +71,10 @@ export default function ThemeManager() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [urlDraft, setUrlDraft] = useState("");
 
   const {
     data,
@@ -96,6 +100,64 @@ export default function ThemeManager() {
     setForm(toForm(theme));
     setFormError(null);
     setFormOpen(true);
+  }
+
+  const imageList = splitList(form.images);
+
+  function setImages(list: string[]) {
+    setForm((prev) => ({ ...prev, images: list.slice(0, 20).join("\n") }));
+  }
+
+  async function uploadImages(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setImageUploading(true);
+    setImageError(null);
+    try {
+      const added: string[] = [];
+      for (const file of Array.from(files)) {
+        const body = new FormData();
+        body.append("file", file);
+        const image = await adminRequest<{ url: string }>("/api/admin/upload/image", {
+          method: "POST",
+          body,
+        });
+        added.push(image.url);
+      }
+      const next = [...splitList(form.images), ...added].slice(0, 20);
+      setForm((prev) => ({
+        ...prev,
+        images: next.join("\n"),
+        cover: prev.cover || added[0] || "",
+      }));
+    } catch (error) {
+      setImageError(describeAdminError(error));
+    } finally {
+      setImageUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function addUrl() {
+    const value = urlDraft.trim();
+    if (!value) return;
+    if (imageList.includes(value)) {
+      setUrlDraft("");
+      return;
+    }
+    setImages([...imageList, value]);
+    setForm((prev) => ({ ...prev, cover: prev.cover || value }));
+    setUrlDraft("");
+  }
+
+  function removeImage(url: string) {
+    setForm((prev) => {
+      const next = splitList(prev.images).filter((item) => item !== url);
+      return {
+        ...prev,
+        images: next.join("\n"),
+        cover: prev.cover === url ? (next[0] ?? "") : prev.cover,
+      };
+    });
   }
 
   async function save() {
@@ -204,12 +266,12 @@ export default function ThemeManager() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="theme-cover">封面图（可选）</Label>
-              <Input
+              <ImageUploader
                 id="theme-cover"
+                label="封面图（可选，留空则用第一张背景图）"
                 value={form.cover}
-                onChange={(event) => setForm((prev) => ({ ...prev, cover: event.target.value }))}
-                placeholder="/images/1.webp"
+                onChange={(url) => setForm((prev) => ({ ...prev, cover: url }))}
+                hint="在卡片上展示的缩略图；支持上传，也可以填站内路径或外链。"
               />
             </div>
 
@@ -269,17 +331,93 @@ export default function ThemeManager() {
                 />
               </div>
             ) : (
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="theme-images">背景图（每行一个地址）</Label>
-                <Textarea
-                  id="theme-images"
-                  rows={3}
-                  value={form.images}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, images: event.target.value }))
-                  }
-                  placeholder={"/images/1.webp\n/images/2.webp"}
-                />
+              <div className="space-y-3 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label>背景图（可上传，也可填外链）</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {imageList.length}/20 张 · 第一张作缩略图
+                  </span>
+                </div>
+
+                {imageError && <AdminError message={imageError} />}
+
+                <div className="flex flex-wrap gap-3">
+                  {imageList.map((url) => (
+                    <div
+                      key={url}
+                      className="group relative h-24 w-32 overflow-hidden rounded-lg border border-border bg-muted"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 地址来自上传结果或后台配置，域名不可预知 */}
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/55 px-1.5 py-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          className="rounded bg-white/15 px-1.5 py-0.5 text-[10px] text-white hover:bg-white/30"
+                          onClick={() => setForm((prev) => ({ ...prev, cover: url }))}
+                          title="设为封面"
+                        >
+                          设为封面
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded bg-red-500/80 p-0.5 text-white hover:bg-red-500"
+                          onClick={() => removeImage(url)}
+                          title="移除这张背景图"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={imageUploading}
+                    className="flex h-24 w-32 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary disabled:opacity-60"
+                  >
+                    {imageUploading ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        上传中…
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="h-4 w-4" />
+                        上传图片
+                      </>
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => void uploadImages(event.target.files)}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Input
+                    value={urlDraft}
+                    onChange={(event) => setUrlDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addUrl();
+                      }
+                    }}
+                    placeholder="https://... 或 /images/xxx.webp"
+                  />
+                  <Button type="button" variant="outline" className="shrink-0" onClick={addUrl}>
+                    <Upload className="mr-1 h-4 w-4" />
+                    添加地址
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  JPG/PNG/WebP/GIF，单张 ≤10MB；上传后自动加入列表，第一张默认为封面。模糊度仍由下方滑块控制。
+                </p>
               </div>
             )}
 

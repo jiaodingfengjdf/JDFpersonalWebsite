@@ -118,4 +118,5 @@ ASSISTANT_SRC=/path/to/chatbot私人助理 node scripts/sync-assistant.mjs --dry
 - 管理接口：`GET/POST /api/admin/themes`、`PUT/DELETE /api/admin/themes/:id`、`POST /api/admin/themes/:id/activate`。
 - 前台切换：设置面板（导航栏齿轮）里选主题与明暗，选择只写浏览器 `localStorage`（`theme-preset` / `theme-mode`），不落库；
   未选择时跟随站点默认主题，主题的 `mode` 会作为初始明暗倾向。
+- 上传：后台新建/编辑主题时，封面与背景图都支持直接上传（`POST /api/admin/upload/image`，按站点配置落本地 `uploads/`、OSS 或图床），也支持手填站内路径或外链；最多 20 张背景图，第一张默认作封面。
 - 背景渲染：`BackgroundProvider` 按当前主题给出 `images / gradientColors / blur`，`BackgroundRenderer` 只负责画出来。
