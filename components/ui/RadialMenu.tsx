@@ -14,6 +14,7 @@ import {
   Clock,
   Music,
   TrendingUp,
+  Trophy,
   Wallet,
   Bookmark,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/ledger", label: "记账", icon: Wallet },
   { href: "/market", label: "行情", icon: TrendingUp },
   { href: "/news", label: "新闻", icon: Newspaper },
+  { href: "/nba", label: "NBA", icon: Trophy },
 ];
 
 export default function RadialMenu() {
