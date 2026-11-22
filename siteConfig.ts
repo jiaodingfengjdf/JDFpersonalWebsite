@@ -46,7 +46,7 @@ export const siteConfig = {
 
   // 社交链接
   social: {
-    github: "https://github.com/yawanaika",
+    github: "https://github.com/jiaodingfengjdf",
     email: "hello@yawanaika.com",
     wechat: "Yawanaika",
     tg: "https://t.me/AYuiMe",
