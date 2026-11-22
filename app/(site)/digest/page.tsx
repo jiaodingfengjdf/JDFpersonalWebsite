@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Newspaper } from "lucide-react";
 import { getAdminSession } from "@/server/auth/guard";
+import { buildDigest } from "@/server/modules/digest";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 
 export const dynamic = "force-dynamic";
@@ -32,10 +33,7 @@ const money = (value: number) =>
 
 export default async function DigestPage() {
   const admin = await getAdminSession();
-  const base = process.env.FRONTEND_ORIGIN ?? "http://127.0.0.1:3000";
-  const digest = await fetch(`${base}/api/digest`, { cache: "no-store" })
-    .then((response) => response.json() as Promise<Digest>)
-    .catch(() => null);
+  const digest: Digest | null = await buildDigest().catch(() => null);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 relative z-10 sm:px-6 lg:px-8">
