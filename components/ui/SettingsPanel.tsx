@@ -29,7 +29,7 @@ export default function SettingsPanel({ onClose: _onClose }: { onClose: () => vo
   }
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-72 p-4 shadow-2xl z-50 rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-white/50 dark:border-white/10">
+    <div className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-5.5rem)] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto overscroll-contain rounded-2xl border border-white/50 bg-white/90 p-4 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">设置</h3>
       </div>
