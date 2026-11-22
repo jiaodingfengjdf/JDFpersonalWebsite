@@ -10,11 +10,11 @@
  */
 export const siteConfig = {
   // 网站标题与博主信息
-  title: "Yawanaikaの秘密小窝",
+  title: "JDF的秘密小窝",
   // 站点 URL 的最终兜底：解析顺序为 SITE_URL → 后台「站点地址」→
   // FRONTEND_ORIGIN → 这里（见 server/site.ts 的 resolveSiteUrl）。
   url: "https://blog.yawanaika.com",
-  authorName: "Yawanaika",
+  authorName: "JDF",
   bio: "不想起床->不想上班->好饿->好困->好想下班->我还不困",
 
   // 头像设置

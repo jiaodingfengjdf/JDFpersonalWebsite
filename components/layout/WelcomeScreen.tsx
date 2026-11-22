@@ -39,7 +39,7 @@ export default async function WelcomeScreen() {
             className="text-4xl md:text-5xl font-bold text-sky-400"
             style={{ fontFamily: "serif" }}
           >
-            の
+            的
           </span>
           <span
             className="text-4xl md:text-5xl font-bold text-white tracking-tight"
