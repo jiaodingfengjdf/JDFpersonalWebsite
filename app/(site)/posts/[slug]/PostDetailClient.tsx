@@ -1,0 +1,383 @@
+"use client";
+/* eslint-disable @next/next/no-img-element -- 图片地址来自后台配置或第三方接口，域名不可预知，按 lib/image.ts 的约定绕过 next/image 优化器 */
+
+import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import dynamic from "next/dynamic";
+import { motion } from "framer-motion";
+import { ArrowLeft, Calendar, Clock, Eye, Heart, X } from "lucide-react";
+import { likePost, reportPostView, type PostDetail } from "@/lib/api";
+import ReadingProgress from "@/components/ui/ReadingProgress";
+import { bypassImageOptimization } from "@/lib/image";
+
+const PostComments = dynamic(() => import("@/components/posts/PostComments"), { ssr: false });
+
+/** 与服务端 lib/markdown.ts 的 TocEntry 同构；只在这里重声明，避免客户端模块拉进 server-only。 */
+interface TocEntry {
+  level: 2 | 3;
+  id: string;
+  text: string;
+}
+
+export default function PostDetailClient({
+  initialPost,
+  contentHtml,
+  toc = [],
+}: {
+  initialPost: Omit<PostDetail, "content">;
+  contentHtml: string;
+  toc?: TocEntry[];
+}) {
+  const [post, setPost] = useState<Omit<PostDetail, "content">>(initialPost);
+  const [likedPosts, setLikedPosts] = useState<Set<number>>(new Set());
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  // Load local likes after hydration so server and client markup match.
+  useEffect(() => {
+    const saved = localStorage.getItem("liked_posts");
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as number[];
+      // Defer the update so hydration completes before the client-only
+      // bookmark state is applied.
+      queueMicrotask(() => setLikedPosts(new Set(parsed)));
+    } catch {
+      localStorage.removeItem("liked_posts");
+    }
+  }, []);
+
+  // Report the view once per browser per article per day. The server also
+  // deduplicates by IP + article + date, so prefetch/prerender cannot inflate
+  // the counter.
+  useEffect(() => {
+    const key = "viewed_posts";
+    const day = new Date().toISOString().slice(0, 10);
+    let viewed: Record<string, string> = {};
+    try {
+      viewed = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<
+        string,
+        string
+      >;
+    } catch {
+      viewed = {};
+    }
+    if (viewed[post.slug] === day) return;
+
+    const next = { ...viewed, [post.slug]: day };
+    localStorage.setItem(key, JSON.stringify(next));
+
+    void reportPostView(post.id)
+      .then(({ counted, views }) => {
+        if (!counted || views === undefined) return;
+        setPost((prev) => ({ ...prev, views }));
+      })
+      .catch(() => {
+        // A failed view report must never break reading.
+      });
+  }, [post.slug, post.id]);
+
+  async function handleLike() {
+    const alreadyLiked = likedPosts.has(post.id);
+    try {
+      const result = await likePost(post.id, alreadyLiked);
+      setLikedPosts((prev) => {
+        const next = new Set(prev);
+        if (alreadyLiked) next.delete(post.id);
+        else next.add(post.id);
+        localStorage.setItem("liked_posts", JSON.stringify([...next]));
+        return next;
+      });
+      setPost((prev) => ({ ...prev, likes: result.likes }));
+    } catch {}
+  }
+
+  // 事件委托：点击文章内容中的图片打开灯箱
+  function handleContentClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.tagName === "IMG") {
+      setLightboxSrc((target as HTMLImageElement).src);
+    }
+  }
+
+  const dateStr = post.published_at
+    ? new Date(post.published_at).toLocaleDateString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    : "";
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12">
+      <ReadingProgress contentRef={contentRef} />
+      {/* 返回按钮 */}
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Link
+          href="/posts"
+          className="inline-flex items-center gap-1.5 text-sm md:text-base text-slate-500 hover:text-sky-500 transition-colors mb-4 md:mb-8"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 md:w-4 md:h-4" />
+          返回文章列表
+        </Link>
+      </motion.div>
+
+      {/* 文章卡片 */}
+      <motion.article
+        initial={false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="rounded-3xl shadow-2xl overflow-hidden bg-white/60 dark:bg-slate-900/70 backdrop-blur-2xl border border-white/30 dark:border-white/10"
+      >
+        {/* 封面图 */}
+        {post.cover && (
+          <div className="relative w-full h-40 sm:h-56 md:h-72 overflow-hidden">
+            <Image
+              src={post.cover}
+              alt={post.title}
+              fill
+              unoptimized={bypassImageOptimization(post.cover)}
+              className="object-cover"
+              priority
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+          </div>
+        )}
+
+        <div className="px-4 sm:px-6 md:px-12 py-5 sm:py-8 md:py-10">
+          {/* 标题 */}
+          <h1 className="text-xl sm:text-2xl md:text-4xl font-bold text-slate-900 dark:text-white leading-tight mb-3 md:mb-4">
+            {post.title}
+          </h1>
+
+          {/* 描述 */}
+          {post.description && (
+            <p className="text-sm sm:text-base md:text-lg text-slate-600 dark:text-slate-300 mb-4 sm:mb-6 md:mb-6 leading-relaxed">
+              {post.description}
+            </p>
+          )}
+
+          {/* 元信息 + 标签 */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-5 pb-5 sm:mb-8 sm:pb-8 border-b border-slate-200/60 dark:border-white/10">
+            {dateStr && (
+              <span
+                className="flex items-center gap-1 sm:gap-1.5"
+                suppressHydrationWarning
+              >
+                <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                {dateStr}
+              </span>
+            )}
+            <span className="flex items-center gap-1 sm:gap-1.5">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              {post.reading_time} 分钟阅读
+            </span>
+            <span className="flex items-center gap-1 sm:gap-1.5">
+              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              {post.views} 次浏览
+            </span>
+            <button
+              type="button"
+              onClick={handleLike}
+              className={`flex items-center gap-1 sm:gap-1.5 transition-colors ${
+                likedPosts.has(post.id)
+                  ? "text-pink-500"
+                  : "text-slate-500 dark:text-slate-400 hover:text-pink-500"
+              }`}
+            >
+              <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-all duration-300 ${
+                likedPosts.has(post.id) ? "fill-pink-500 scale-110" : ""
+              }`} />
+              {post.likes} 个点赞
+            </button>
+          </div>
+
+          {/* 目录：标题少于两条时没有意义，直接不渲染 */}
+          {toc.length >= 2 && (
+            <nav
+              aria-label="文章目录"
+              className="mb-5 sm:mb-7 rounded-xl border border-slate-200/70 bg-slate-50/70 px-4 py-3 dark:border-white/10 dark:bg-white/5"
+            >
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                目录
+              </p>
+              <ul className="space-y-1">
+                {toc.map((entry) => (
+                  <li key={entry.id} className={entry.level === 3 ? "pl-4" : undefined}>
+                    <a
+                      href={`#${entry.id}`}
+                      className="block truncate text-sm text-slate-600 transition-colors hover:text-indigo-500 dark:text-slate-300 dark:hover:text-indigo-400"
+                    >
+                      {entry.text}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
+
+          {/* 文章内容 */}
+          <div className="relative" ref={contentRef}>
+            <style>{`
+              .post-content :is(h1, h2, h3, h4) {
+                scroll-margin-top: 5.5rem;
+              }
+              .post-content ul {
+                list-style-type: disc !important;
+                padding-left: 1.5rem !important;
+                margin: 1rem 0 !important;
+              }
+              .post-content ol {
+                list-style-type: decimal !important;
+                padding-left: 1.5rem !important;
+                margin: 1rem 0 !important;
+              }
+              .post-content li {
+                margin: 0.25rem 0 !important;
+                line-height: 1.75 !important;
+              }
+              .post-content pre {
+                background-color: #1e293b !important;
+                color: #e2e8f0 !important;
+                padding: 1.25rem !important;
+                border-radius: 0.75rem !important;
+                overflow-x: auto !important;
+                margin: 1.5rem 0 !important;
+                border: 1px solid rgba(255,255,255,0.08) !important;
+                font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace !important;
+                line-height: 1.6 !important;
+                white-space: pre !important;
+                word-break: normal !important;
+                overflow-wrap: normal !important;
+              }
+              .post-content pre code {
+                background-color: transparent !important;
+                padding: 0 !important;
+                font-size: 0.9em !important;
+                white-space: pre !important;
+                word-break: normal !important;
+                font-family: inherit !important;
+              }
+              .post-content code::before, .post-content code::after { content: none !important; }
+              .post-content p code, .post-content li code {
+                background-color: rgba(99,102,241,0.1) !important;
+                color: #6366f1 !important;
+                padding: 0.15rem 0.4rem !important;
+                border-radius: 0.375rem !important;
+                font-weight: 600 !important;
+                font-size: 0.88em !important;
+              }
+              .dark .post-content p code, .dark .post-content li code {
+                background-color: rgba(99,102,241,0.2) !important;
+                color: #a5b4fc !important;
+              }
+              .post-content blockquote {
+                border-left: 4px solid #6366f1 !important;
+                padding-left: 1rem !important;
+                margin: 1.5rem 0 !important;
+                color: #475569 !important;
+                font-style: italic !important;
+              }
+              .dark .post-content blockquote {
+                color: #94a3b8 !important;
+              }
+              .post-content img {
+                display: block !important;
+                margin: 2rem auto !important;
+                border-radius: 1rem !important;
+                max-width: 100% !important;
+                height: auto !important;
+                cursor: zoom-in !important;
+              }
+              .post-content a {
+                color: #6366f1 !important;
+                text-decoration: underline !important;
+                text-underline-offset: 3px !important;
+              }
+              .dark .post-content a {
+                color: #818cf8 !important;
+              }
+              .post-content h2 {
+                font-size: 1.5rem !important;
+                font-weight: 700 !important;
+                margin-top: 2rem !important;
+                margin-bottom: 0.75rem !important;
+              }
+              .post-content h3 {
+                font-size: 1.25rem !important;
+                font-weight: 600 !important;
+                margin-top: 1.5rem !important;
+                margin-bottom: 0.5rem !important;
+              }
+              .post-content table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                margin: 1.5rem 0 !important;
+                border: 2px solid #cbd5e1 !important;
+                border-radius: 0.5rem !important;
+                overflow: hidden !important;
+              }
+              .post-content th, .post-content td {
+                border: 1px solid #cbd5e1 !important;
+                padding: 0.6rem 1rem !important;
+                text-align: left !important;
+              }
+              .dark .post-content table {
+                border-color: #475569 !important;
+              }
+              .dark .post-content th, .dark .post-content td {
+                border-color: #475569 !important;
+              }
+              .post-content th {
+                background-color: #f1f5f9 !important;
+                font-weight: 600 !important;
+              }
+              .dark .post-content th {
+                background-color: #1e293b !important;
+              }
+            `}</style>
+            <div
+              className="post-content prose prose-sm sm:prose-base md:prose-lg dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 leading-relaxed"
+              onClick={handleContentClick}
+              dangerouslySetInnerHTML={{ __html: contentHtml }}
+            />
+          </div>
+        </div>
+      </motion.article>
+
+      {/* 评论区域 */}
+      <PostComments postId={post.id} />
+
+      {/* 图片灯箱 */}
+      <div
+        className={`fixed inset-0 z-[9999] flex items-center justify-center transition-opacity duration-200 ${lightboxSrc ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+        onClick={() => setLightboxSrc(null)}
+      >
+        <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" />
+        <button
+          type="button"
+          onClick={() => setLightboxSrc(null)}
+          className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+        >
+          <X className="w-6 h-6" />
+        </button>
+        {lightboxSrc && (
+          <img
+            src={lightboxSrc}
+            alt=""
+            className="relative z-10 max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

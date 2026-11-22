@@ -1,0 +1,118 @@
+import { cache } from "react";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { renderMarkdownWithToc } from "@/lib/markdown";
+import { AppError } from "@/server/http/errors";
+import { getPostsService } from "@/server/modules/posts";
+import {
+  getShareConfig,
+  getSiteUrl,
+  shareImageUrl,
+  siteUrl,
+} from "@/server/site";
+import PostDetailClient from "./PostDetailClient";
+
+export const revalidate = 60;
+
+interface PageProps {
+  params: Promise<{ slug: string }>;
+}
+
+const getPost = cache(async (slug: string) => {
+  return getPostsService().getBySlug(slug, { publishedOnly: true });
+});
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+
+  try {
+    const post = await getPost(slug);
+    const base = await getSiteUrl();
+    const url = siteUrl(`/posts/${post.slug}`, base);
+    // Fall back to the configured site share card for description and image so
+    // a post without a cover still produces a complete preview.
+    const share = await getShareConfig({
+      title: post.title,
+      description: post.description,
+      image: post.cover ? shareImageUrl(post.cover, base) : undefined,
+    }, base);
+
+    return {
+      title: post.title,
+      description: share.description,
+      alternates: { canonical: url },
+      openGraph: {
+        type: "article",
+        title: share.title,
+        description: share.description,
+        url,
+        publishedTime: post.published_at ?? undefined,
+        images: share.image ? [{ url: share.image }] : undefined,
+      },
+      twitter: {
+        card: share.card,
+        title: share.title,
+        description: share.description,
+        images: share.image ?? undefined,
+      },
+    };
+  } catch {
+    return {
+      title: "文章不存在",
+      robots: { index: false, follow: false },
+    };
+  }
+}
+
+export default async function PostDetailPage({ params }: PageProps) {
+  const { slug } = await params;
+
+  const post = await getPost(slug).catch((error: unknown) => {
+    if (error instanceof AppError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  });
+
+  if (!post) notFound();
+
+  const { content, ...initialPost } = post;
+  const [{ html: contentHtml, toc }, base] = await Promise.all([
+    renderMarkdownWithToc(content),
+    getSiteUrl(),
+  ]);
+
+  // BlogPosting 结构化数据：搜索结果和第三方聚合靠它取标题、封面和发布时间。
+  // 只输出库里的真实字段，不臆造作者/评分等不存在的属性。
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.description || undefined,
+    image: post.cover ? shareImageUrl(post.cover, base) : undefined,
+    url: siteUrl(`/posts/${post.slug}`, base),
+    mainEntityOfPage: siteUrl(`/posts/${post.slug}`, base),
+    datePublished: post.published_at ?? post.created_at,
+    dateModified: post.updated_at,
+    ...(post.tags.length > 0 ? { keywords: post.tags.join(",") } : {}),
+    ...(post.category ? { articleSection: post.category } : {}),
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        // JSON.stringify 会转义引号，内容全部来自数据库字段，不存在 </script> 注入面
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <PostDetailClient
+        key={post.slug}
+        initialPost={initialPost}
+        contentHtml={contentHtml}
+        toc={toc}
+      />
+    </>
+  );
+}

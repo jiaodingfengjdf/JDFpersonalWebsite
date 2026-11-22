@@ -1,0 +1,456 @@
+/*
+ * Markdown 阅读样式（手机优先）。
+ * 所有规则都收在 .md 下面，不写全局 * 重置，避免影响组件外部。
+ * 颜色优先跟随 app.css 的主题变量；同时保留字面量 fallback，
+ * 并用 :root[data-theme='dark'] 显式覆盖一套深色值。
+ */
+
+.md {
+  /* 文字 / 边框 / 强调色：跟随应用主题，首帧 data-theme 还没落到 <html> 时也不会读不清 */
+  --md-text: var(--text, #1c1f24);
+  --md-muted: var(--text-2, #667085);
+  --md-border: var(--border, rgba(16, 24, 40, 0.12));
+  --md-link: var(--accent, #2563eb);
+  --md-accent: var(--accent, #3b82f6);
+  --md-inline-bg: var(--surface-strong, rgba(16, 24, 40, 0.06));
+  --md-cite-bg: var(--accent-soft, rgba(59, 130, 246, 0.12));
+  --md-thead-bg: var(--surface, rgba(16, 24, 40, 0.04));
+
+  /* 代码块在浅色主题下也保持深色，语法配色只需要一套 */
+  --code-bg: #12161f;
+  --code-head-bg: rgba(255, 255, 255, 0.05);
+  --code-fg: #e6e9ef;
+  --code-muted: rgba(230, 233, 239, 0.62);
+  --code-border: rgba(255, 255, 255, 0.08);
+
+  /* highlight.js 语义色（只作用于 .md 内部，不引入全局主题文件） */
+  --hl-keyword: #c792ea;
+  --hl-string: #a5e075;
+  --hl-number: #f6c177;
+  --hl-comment: #6b7688;
+  --hl-function: #82aaff;
+  --hl-attr: #ffcb6b;
+  --hl-builtin: #89ddff;
+  --hl-meta: #7f8ea3;
+
+  box-sizing: border-box;
+  min-width: 0;
+  font-family: var(
+    --font,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    system-ui,
+    sans-serif
+  );
+  font-size: 16px;
+  line-height: 1.72;
+  color: var(--md-text, #1c1f24);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root[data-theme='dark'] .md {
+  --md-text: #e8eaef;
+  --md-muted: #9aa4b2;
+  --md-border: rgba(255, 255, 255, 0.14);
+  --md-link: #7cb0ff;
+  --md-accent: #5b9dff;
+  --md-inline-bg: rgba(255, 255, 255, 0.1);
+  --md-cite-bg: rgba(91, 157, 255, 0.18);
+  --md-thead-bg: rgba(255, 255, 255, 0.06);
+}
+
+/* ------------------------------------------------------------------ */
+/* 文本块                                                              */
+/* ------------------------------------------------------------------ */
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0 0 0.85em;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: 1.35em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.md h1 {
+  font-size: 1.32em;
+}
+
+.md h2 {
+  font-size: 1.2em;
+}
+
+.md h3 {
+  font-size: 1.08em;
+}
+
+.md h4 {
+  font-size: 1em;
+}
+
+.md h5,
+.md h6 {
+  font-size: 0.94em;
+  color: var(--md-muted, #667085);
+}
+
+.md a {
+  color: var(--md-link, #2563eb);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.md strong {
+  font-weight: 600;
+}
+
+.md hr {
+  margin: 1.4em 0;
+  border: 0;
+  border-top: 1px solid var(--md-border, rgba(16, 24, 40, 0.12));
+}
+
+.md blockquote {
+  margin: 0.75em 0;
+  padding: 0.1em 0 0.1em 0.85em;
+  border-left: 2px solid var(--md-accent, #3b82f6);
+  color: var(--md-muted, #667085);
+}
+
+.md blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 列表                                                                */
+/* ------------------------------------------------------------------ */
+
+.md ul,
+.md ol {
+  margin: 0.35em 0 0.85em;
+  padding-left: 1.25em;
+}
+
+.md li {
+  margin: 0.18em 0;
+}
+
+.md li > p {
+  margin: 0;
+}
+
+.md li > ul,
+.md li > ol {
+  margin: 0.15em 0;
+}
+
+.md ul ul,
+.md ul ol,
+.md ol ul,
+.md ol ol {
+  margin: 0.15em 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 表格（内部横向滚动，不撑破消息气泡）                                 */
+/* ------------------------------------------------------------------ */
+
+.md table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.7em 0 1em;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 0.94em;
+}
+
+.md table th,
+.md table td {
+  padding: 0.42em 0.62em;
+  border: 1px solid var(--md-border, rgba(16, 24, 40, 0.12));
+  text-align: left;
+  vertical-align: top;
+}
+
+.md table th {
+  background: var(--md-thead-bg, rgba(16, 24, 40, 0.04));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 短标签列（能力/键名）不换行，正文列照常换行，避免「联网搜/索」这种断字 */
+.md table th,
+.md table td:first-child {
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 行内代码 / 代码块                                                    */
+/* ------------------------------------------------------------------ */
+
+.md code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace);
+  font-size: 0.92em;
+  padding: 0.12em 0.34em;
+  border-radius: 6px;
+  background: var(--md-inline-bg, rgba(16, 24, 40, 0.06));
+  overflow-wrap: anywhere;
+}
+
+.md .code-block {
+  margin: 0.8em 0 1em;
+  border-radius: 12px;
+  background: var(--code-bg, #12161f);
+  border: 1px solid var(--code-border, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+}
+
+.md .code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+  background: var(--code-head-bg, rgba(255, 255, 255, 0.05));
+  border-bottom: 1px solid var(--code-border, rgba(255, 255, 255, 0.08));
+  color: var(--code-muted, rgba(230, 233, 239, 0.62));
+  font-family: var(--mono, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.md .code-lang {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md .code-copy {
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 56px;
+  min-height: 44px; /* 触控区 ≥44px，方便单手拇指 */
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--code-muted, rgba(230, 233, 239, 0.62));
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.md .code-copy:active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.md .code-pre {
+  margin: 0;
+  padding: 12px 14px 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: transparent;
+  color: var(--code-fg, #e6e9ef);
+  font-size: 0.875rem;
+  line-height: 1.62;
+}
+
+.md .code-pre code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* ------------------------------------------------------------------ */
+/* highlight.js 语义色                                                 */
+/* ------------------------------------------------------------------ */
+
+.md .hljs-comment,
+.md .hljs-quote {
+  color: var(--hl-comment, #6b7688);
+  font-style: italic;
+}
+
+.md .hljs-keyword,
+.md .hljs-selector-tag,
+.md .hljs-literal,
+.md .hljs-doctag,
+.md .hljs-formula {
+  color: var(--hl-keyword, #c792ea);
+}
+
+.md .hljs-string,
+.md .hljs-regexp,
+.md .hljs-addition,
+.md .hljs-attribute {
+  color: var(--hl-string, #a5e075);
+}
+
+.md .hljs-number,
+.md .hljs-symbol,
+.md .hljs-bullet,
+.md .hljs-variable,
+.md .hljs-template-variable {
+  color: var(--hl-number, #f6c177);
+}
+
+.md .hljs-title,
+.md .hljs-section,
+.md .hljs-title.function_,
+.md .hljs-title.class_ {
+  color: var(--hl-function, #82aaff);
+}
+
+.md .hljs-attr,
+.md .hljs-property,
+.md .hljs-selector-attr,
+.md .hljs-selector-class,
+.md .hljs-selector-id {
+  color: var(--hl-attr, #ffcb6b);
+}
+
+.md .hljs-built_in,
+.md .hljs-type,
+.md .hljs-class {
+  color: var(--hl-builtin, #89ddff);
+}
+
+.md .hljs-meta,
+.md .hljs-tag,
+.md .hljs-name,
+.md .hljs-deletion {
+  color: var(--hl-meta, #7f8ea3);
+}
+
+.md .hljs-emphasis {
+  font-style: italic;
+}
+
+.md .hljs-strong {
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ */
+/* 图片 / mermaid                                                      */
+/* ------------------------------------------------------------------ */
+
+.md img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.6em auto;
+  border-radius: 10px;
+  background: var(--md-inline-bg, rgba(16, 24, 40, 0.06));
+}
+
+.md .mermaid-block {
+  margin: 1em 0;
+  padding: 10px 6px;
+  border: 1px solid var(--md-border, rgba(16, 24, 40, 0.12));
+  border-radius: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  text-align: center;
+}
+
+.md .mermaid-block svg {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.md .mermaid-error {
+  padding: 8px 10px 10px;
+  color: var(--md-muted, #667085);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* 失败时回显源码：仍是深色底，保证浅色主题下也读得清 */
+.md .mermaid-block .code-pre {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--code-bg, #12161f);
+  color: var(--code-fg, #e6e9ef);
+  text-align: left;
+}
+
+/* ------------------------------------------------------------------ */
+/* 引用角标                                                            */
+/* ------------------------------------------------------------------ */
+
+.md .cite {
+  display: inline;
+  margin: 0 0.1em;
+  font-size: 0.72em;
+  line-height: 0;
+  vertical-align: baseline;
+}
+
+.md .cite a {
+  display: inline-block;
+  min-width: 18px; /* 手机上可点面积下限 */
+  padding: 1px 3px;
+  border-radius: 6px;
+  background: var(--md-cite-bg, rgba(59, 130, 246, 0.12));
+  color: var(--md-accent, #3b82f6);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: super;
+}
+
+.md .cite a:active {
+  background: var(--md-accent, #3b82f6);
+  color: #ffffff;
+}
+
+/* 引用还没到位时的隐藏占位，不占布局 */
+.md .cite-pending {
+  display: none;
+}

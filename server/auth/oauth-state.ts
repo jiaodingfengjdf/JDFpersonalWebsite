@@ -1,0 +1,30 @@
+import { env } from "@/server/env";
+import {
+  GITHUB_STATE_COOKIE,
+  GITHUB_STATE_TTL_SECONDS,
+} from "./constants";
+import { readCookie } from "./cookies";
+
+function cookieParts(value: string, maxAge: number): string {
+  const parts = [
+    `${GITHUB_STATE_COOKIE}=${encodeURIComponent(value)}`,
+    "Path=/api/auth/github",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${maxAge}`,
+  ];
+  if (env.NODE_ENV === "production") parts.push("Secure");
+  return parts.join("; ");
+}
+
+export function githubStateCookie(state: string): string {
+  return cookieParts(state, GITHUB_STATE_TTL_SECONDS);
+}
+
+export function clearGithubStateCookie(): string {
+  return cookieParts("", 0);
+}
+
+export function readGithubStateCookie(request: Request): string | null {
+  return readCookie(request, GITHUB_STATE_COOKIE);
+}

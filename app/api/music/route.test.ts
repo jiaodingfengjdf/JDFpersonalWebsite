@@ -1,0 +1,204 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { metingPlaylist, metingSong, metingUrl, metingPic, enforceRateLimit } = vi.hoisted(() => ({
+  metingPlaylist: vi.fn(),
+  metingSong: vi.fn(),
+  metingUrl: vi.fn(),
+  metingPic: vi.fn(),
+  enforceRateLimit: vi.fn(),
+}));
+
+vi.mock("@meting/core", () => {
+  class MetingMock {
+    format() {}
+    playlist(id: string) {
+      return metingPlaylist(id);
+    }
+    song(id: string) {
+      return metingSong(id);
+    }
+    url(id: string, br: number) {
+      return metingUrl(id, br);
+    }
+    pic(id: string, size: number) {
+      return metingPic(id, size);
+    }
+  }
+  return { default: MetingMock };
+});
+vi.mock("@/server/http/handler", () => ({
+  handle: async (action: () => Promise<Response>) => action(),
+}));
+vi.mock("@/server/http/rate-limit", () => ({ enforceRateLimit }));
+vi.mock("@/server/http/ip", () => ({ getClientIp: () => "203.0.113.10" }));
+
+import { GET } from "./route";
+
+function track(id: string) {
+  return {
+    id,
+    name: "song " + id,
+    artist: ["someone"],
+    pic_id: "pic-" + id,
+    url_id: "url-" + id,
+    lyric_id: "lyric-" + id,
+  };
+}
+
+function musicRequest(query: string) {
+  return {
+    nextUrl: new URL("http://localhost:3000/api/music" + query),
+  } as unknown as Parameters<typeof GET>[0];
+}
+
+/**
+ * 兜底音源探测：默认认为拿不到，需要时再放开。
+ * 公开接口可播时 302 到 *.music.126.net，不可播时回 200 空响应，
+ * 所以 location 默认指向网易云 CDN 的可播文件，由 status 决定是否算可播。
+ */
+function stubFallback(status: number, location = "https://m8.music.126.net/fallback.mp3?x=1") {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, status < 300 || status >= 400 ? { status } : { status, headers: { location } })),
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  metingUrl.mockResolvedValue(JSON.stringify({ url: "http://m8.music.126.net/a.mp3" }));
+  metingPic.mockResolvedValue(JSON.stringify({ url: "http://p3.music.126.net/a.jpg" }));
+  stubFallback(404);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("GET /api/music", () => {
+  it("returns a diagnostic message instead of a silent empty array", async () => {
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("1"), track("2")]));
+    metingUrl.mockResolvedValue(JSON.stringify({ url: null }));
+
+    const response = await GET(musicRequest("?id=628549602"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.songs).toEqual([]);
+    expect(body.total).toBe(2);
+    expect(body.skipped).toBe(2);
+    expect(body.message).toContain("不可播放");
+    // 空结果不缓存，否则配置或版权恢复后还要等 10 分钟。
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("does not cache an empty result, so the next request retries upstream", async () => {
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("3")]));
+    metingUrl.mockResolvedValue(JSON.stringify({ url: null }));
+
+    const empty = await GET(musicRequest("?id=777"));
+    expect((await empty.json()).songs).toEqual([]);
+
+    metingUrl.mockResolvedValue(JSON.stringify({ url: "https://m8.music.126.net/b.mp3" }));
+    const retry = await GET(musicRequest("?id=777"));
+    const body = await retry.json();
+
+    expect(body.songs).toHaveLength(1);
+    expect(body.songs[0].src).toBe("https://m8.music.126.net/b.mp3");
+    expect(metingPlaylist).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches playable results and reports skipped tracks", async () => {
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("10"), track("11")]));
+    metingUrl.mockImplementation(async (id: string) =>
+      JSON.stringify({ url: id === "url-10" ? "http://m8.music.126.net/c.mp3" : null }),
+    );
+
+    const response = await GET(musicRequest("?id=4242"));
+    const body = await response.json();
+
+    expect(body.songs).toHaveLength(1);
+    expect(body.songs[0].cover).toBe("https://p3.music.126.net/a.jpg");
+    expect(body.skipped).toBe(1);
+    expect(body.message).toContain("跳过 1 首");
+    expect(response.headers.get("cache-control")).toContain("max-age=600");
+
+    const cached = await GET(musicRequest("?id=4242"));
+    expect((await cached.json()).songs).toHaveLength(1);
+    expect(metingPlaylist).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the public meting source when the server cannot resolve a url", async () => {
+    // 海外服务器直连网易云拿不到地址，但公开接口能 302 到可播放文件。
+    stubFallback(302);
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("30")]));
+    metingUrl.mockResolvedValue(JSON.stringify({ url: null }));
+
+    const response = await GET(musicRequest("?id=5150"));
+    const body = await response.json();
+
+    expect(body.songs).toHaveLength(1);
+    // 交给前端的是公开接口地址：播放时浏览器现取 302，避免用到过期的签名直链。
+    expect(body.songs[0].src).toBe(
+      "https://api.injahow.cn/meting/?server=netease&type=url&id=url-30",
+    );
+    expect(body.message).toBe("");
+  });
+
+  it("ignores a 200 from the fallback source, which means no playable url", async () => {
+    // 公开接口对无版权曲目回 200 空体，这里必须当成不可播，否则会把坏链接给前端。
+    stubFallback(200);
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("32")]));
+    metingUrl.mockResolvedValue(JSON.stringify({ url: null }));
+
+    const body = await (await GET(musicRequest("?id=5152"))).json();
+
+    expect(body.songs).toEqual([]);
+    expect(body.message).toContain("不可播放");
+  });
+
+  it("ignores a redirect that does not point at the netease CDN", async () => {
+    stubFallback(302, "https://example.com/not-music.mp3");
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("33")]));
+    metingUrl.mockResolvedValue(JSON.stringify({ url: null }));
+
+    const body = await (await GET(musicRequest("?id=5153"))).json();
+
+    expect(body.songs).toEqual([]);
+    expect(body.message).toContain("不可播放");
+  });
+
+  it("keeps the diagnostic when the fallback source cannot resolve either", async () => {
+    metingPlaylist.mockResolvedValue(JSON.stringify([track("31")]));
+    metingUrl.mockResolvedValue(JSON.stringify({ url: null }));
+
+    const body = await (await GET(musicRequest("?id=5151"))).json();
+
+    expect(body.songs).toEqual([]);
+    expect(body.message).toContain("不可播放");
+  });
+
+  it("explains an empty playlist instead of pretending nothing is configured", async () => {
+    metingPlaylist.mockResolvedValue(JSON.stringify([]));
+
+    const response = await GET(musicRequest("?id=999"));
+    const body = await response.json();
+
+    expect(body.songs).toEqual([]);
+    expect(body.total).toBe(0);
+    expect(body.message).toContain("歌单 ID");
+  });
+
+  it("keeps working when a single requested song cannot be found", async () => {
+    metingSong.mockImplementation(async (id: string) => {
+      if (id === "2") throw new Error("not found");
+      return JSON.stringify([track(id)]);
+    });
+
+    const response = await GET(musicRequest("?ids=1,2"));
+    const body = await response.json();
+
+    expect(body.source).toBe("ids");
+    expect(body.songs).toHaveLength(1);
+    expect(body.songs[0].id).toBe("1");
+  });
+});

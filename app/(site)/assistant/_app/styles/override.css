@@ -1,0 +1,20 @@
+/* 站点内嵌时的布局兜底：确保助理铺满容器、底部输入框不被裁掉 */
+.assistant-root {
+  height: auto !important;
+}
+
+.assistant-root .app {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden;
+}
+
+.assistant-root .chat-screen,
+.assistant-root .settings-screen {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.assistant-root .messages {
+  min-height: 0;
+}

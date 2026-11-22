@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.gitignore
+.env*
+# Keep Kirameku/data/*.ts source modules; only exclude the local database.
+data/*.db
+data/*.db-*
+backups
+# Runtime upload directory only. `app/uploads/` is the GET /uploads/* Route
+# Handler and must stay in the build context, otherwise uploaded images 404.
+/uploads/
+coverage
+*.log
+*.tsbuildinfo
+Dockerfile
+.dockerignore

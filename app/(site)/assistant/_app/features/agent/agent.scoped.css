@@ -1,0 +1,567 @@
+/* ==========================================================================
+   个人 Agent 面板（任务 / 记忆 / 笔记）
+   - 所有类名都以 agent- 前缀，避免与 app.css 冲突；不做全局重置。
+   - 颜色一律取 app.css 的 CSS 变量，深浅主题共用一套规则。
+   ========================================================================== *//* ------------------------------ 外壳 ------------------------------ */
+
+.agent-root{
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  font-family: var(--font);
+}/* 遮罩用中性黑影：两种主题下都只负责压暗，不引入新的色相 */
+.agent-backdrop{
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.52);
+  backdrop-filter: blur(2px);
+  animation: agent-fade 0.18s ease-out;
+}.agent-sheet{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 92vh;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: agent-rise 0.26s cubic-bezier(0.22, 0.8, 0.22, 1);
+}.agent-sheet:focus{
+  outline: none;
+}.agent-sheet:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}@keyframes agent-fade{
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}@keyframes agent-rise{
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}/* ------------------------------ 头部 ------------------------------ */
+
+.agent-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px 16px;
+}.agent-head-main{
+  min-width: 0;
+}.agent-title{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--text);
+}.agent-title-mark{
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}.agent-sub{
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}.agent-icon-btn{
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}.agent-icon-btn:hover{
+  background: var(--surface);
+  color: var(--text);
+}.agent-icon-btn:active{
+  background: var(--surface);
+}.agent-icon-btn:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}/* ------------------------------ Tabs ------------------------------ */
+
+.agent-tabs{
+  display: flex;
+  gap: 4px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+}.agent-tab{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}.agent-tab:hover{
+  color: var(--text-2);
+  background: var(--surface);
+}.agent-tab[aria-selected='true']{
+  color: var(--text);
+  background: var(--surface);
+}.agent-tab[aria-selected='true']::after{
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}.agent-tab:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}/* ------------------------------ 滚动区 ------------------------------ */
+
+.agent-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px 16px;
+}/* ------------------------------ 输入与按钮 ------------------------------ */
+
+.agent-add{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}.agent-input, .agent-textarea{
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}.agent-input{
+  min-height: 42px;
+  padding: 0 12px;
+}.agent-add .agent-input{
+  flex: 1 1 auto;
+}.agent-textarea{
+  min-height: 108px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  resize: vertical;
+}.agent-input::placeholder, .agent-textarea::placeholder{
+  color: var(--text-3);
+}.agent-input:focus, .agent-textarea:focus{
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}.agent-btn{
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+}.agent-btn:hover{
+  filter: brightness(1.08);
+}.agent-btn:active{
+  transform: translateY(1px);
+}.agent-btn:disabled{
+  opacity: 0.5;
+  cursor: default;
+  filter: none;
+}.agent-btn:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}.agent-btn.ghost{
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-2);
+}/* 行尾删除：弱化成灰，只有悬停才轻微提示 danger */
+.agent-del{
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0.72;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}.agent-del:hover{
+  color: var(--danger);
+  background: var(--surface);
+  opacity: 1;
+}.agent-del:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  opacity: 1;
+}/* ------------------------------ 分组与列表 ------------------------------ */
+
+.agent-group{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}.agent-group-title{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+}.agent-group-count{
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}.agent-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}.agent-empty{
+  margin: 0;
+  padding: 22px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}/* ------------------------------ 任务 ------------------------------ */
+
+.agent-task{
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 6px 4px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}.agent-check{
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}.agent-check-box{
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}.agent-check:hover .agent-check-box{
+  border-color: var(--accent);
+}.agent-check[aria-checked='true'] .agent-check-box{
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-elev-2);
+}.agent-check:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}.agent-task-main{
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 2px 9px 0;
+}.agent-task-title{
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}.agent-task.is-done .agent-task-title{
+  color: var(--text-3);
+  text-decoration: line-through;
+}.agent-task-meta{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}.agent-overdue{  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  font-weight: 600;
+}.agent-task-note{
+  font-size: 12px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}/* ------------------------------ 记忆 ------------------------------ */
+
+.agent-memory{
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 6px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}.agent-memory-main{
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}.agent-memory-text{
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}.agent-memory-meta{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}.agent-badge{
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 600;
+}.agent-badge.is-user{
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}.agent-hits{
+  font-variant-numeric: tabular-nums;
+}/* ------------------------------ 笔记 ------------------------------ */
+
+.agent-new-note{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}.agent-new-note:hover{
+  background: var(--surface);
+  border-color: var(--accent-soft);
+  color: var(--text);
+}.agent-new-note:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}.agent-editor{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}.agent-editor-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}.agent-note{
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}.agent-note-head{
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 6px 4px 2px;
+}.agent-note-main{
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 8px 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}.agent-note-main:hover{
+  background: var(--bg-elev-2);
+}.agent-note-main:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}.agent-note-title{
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}.agent-note-text{
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}.agent-note.is-open .agent-note-text{
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}.agent-note-foot{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}.agent-note-chev{
+  margin-left: auto;
+  transition: transform 0.18s ease;
+}.agent-note.is-open .agent-note-chev{
+  transform: rotate(180deg);
+}/* ------------------------------ 桌面端 ------------------------------ */
+
+@media (min-width: 560px){
+  .agent-root {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .agent-sheet {
+    max-width: 560px;
+    max-height: min(92vh, 760px);
+    border-bottom: 1px solid var(--border);
+    border-radius: 20px;
+    animation: agent-pop 0.2s ease-out;
+  }
+
+  .agent-tabs {
+    padding: 0 14px;
+  }
+}@keyframes agent-pop{
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}/* ------------------------------ 降级 ------------------------------ */
+
+@media (prefers-reduced-motion: reduce){
+  .agent-backdrop,
+  .agent-sheet {
+    animation: none;
+  }
+
+  .agent-tab,
+  .agent-btn,
+  .agent-del,
+  .agent-check-box,
+  .agent-note-chev,
+  .agent-new-note,
+  .agent-note-main {
+    transition: none;
+  }
+}/* 周期任务标记（每天 09:00 / 每周一 09:00） */
+.agent-repeat{  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+}/* 从通知点进来时高亮目标任务 */
+.agent-task.is-focus{
+  border-color: var(--accent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  animation: agentFocusPulse 1.4s ease-in-out 2;
+}@keyframes agentFocusPulse{
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+}
