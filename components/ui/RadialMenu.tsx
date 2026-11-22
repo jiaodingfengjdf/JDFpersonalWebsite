@@ -7,6 +7,7 @@ import {
   Home,
   BookOpen,
   Headphones,
+  Clapperboard,
   MessageSquare,
   Newspaper,
   FolderGit2,
@@ -39,6 +40,7 @@ const navItems = [
   { href: "/nba", label: "NBA", icon: Trophy },
   { href: "/library", label: "书架", icon: BookOpen },
   { href: "/podcast", label: "播客", icon: Headphones },
+  { href: "/watch", label: "影视", icon: Clapperboard },
 ];
 
 export default function RadialMenu() {
