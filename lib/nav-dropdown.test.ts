@@ -26,7 +26,7 @@ describe("parseNavDropdownConfig", () => {
         label: "更多",
         icon: "compass",
         links: [
-          { label: "GitHub", href: "https://github.com/yawanaika", description: "仓库" },
+          { label: "GitHub", href: "https://github.com/jiaodingfengjdf", description: "仓库" },
         ],
       }),
     );
@@ -36,7 +36,7 @@ describe("parseNavDropdownConfig", () => {
       label: "更多",
       icon: "compass",
       links: [
-        { label: "GitHub", href: "https://github.com/yawanaika", description: "仓库" },
+        { label: "GitHub", href: "https://github.com/jiaodingfengjdf", description: "仓库" },
       ],
     });
   });

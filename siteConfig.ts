@@ -13,7 +13,7 @@ export const siteConfig = {
   title: "JDF的秘密小窝",
   // 站点 URL 的最终兜底：解析顺序为 SITE_URL → 后台「站点地址」→
   // FRONTEND_ORIGIN → 这里（见 server/site.ts 的 resolveSiteUrl）。
-  url: "https://blog.yawanaika.com",
+  url: "http://localhost:3000",
   authorName: "JDF",
   bio: "不想起床->不想上班->好饿->好困->好想下班->我还不困",
 
@@ -47,9 +47,9 @@ export const siteConfig = {
   // 社交链接
   social: {
     github: "https://github.com/jiaodingfengjdf",
-    email: "hello@yawanaika.com",
-    wechat: "Yawanaika",
-    tg: "https://t.me/AYuiMe",
+    email: "",
+    wechat: "",
+    tg: "",
   },
 
   // 站点信息
