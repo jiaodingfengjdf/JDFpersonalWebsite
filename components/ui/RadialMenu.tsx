@@ -13,6 +13,7 @@ import {
   Camera,
   Clock,
   Music,
+  TrendingUp,
   Wallet,
   Bookmark,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/timeline", label: "归档", icon: Clock },
   { href: "/music", label: "音乐", icon: Music },
   { href: "/ledger", label: "记账", icon: Wallet },
+  { href: "/market", label: "行情", icon: TrendingUp },
 ];
 
 export default function RadialMenu() {
