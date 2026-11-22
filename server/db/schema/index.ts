@@ -1,6 +1,7 @@
 export { adminAuditLog } from "./audit";
 export { album, photo } from "./album";
 export { bookmarkCategory, bookmarkSite } from "./bookmark";
+export { collectionItem } from "./collection";
 export { category } from "./category";
 export { chatter, chatterComment } from "./chatter";
 export { comment } from "./comment";

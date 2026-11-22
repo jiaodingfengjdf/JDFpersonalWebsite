@@ -54,7 +54,7 @@ const navLinks: NavLink[] = [
   { href: "/posts", label: "文章", icon: BookOpen },
   { href: "/moments", label: "说说", icon: MessageSquare },
   { href: "/messages", label: "留言", icon: Newspaper },
-  { href: "/bookmark", label: "收藏夹", icon: Bookmark },
+  { href: "/bookmark", label: "收藏", icon: Bookmark },
   { href: "/projects", label: "项目", icon: FolderGit2 },
   { href: "/friends", label: "友链", icon: Users },
   { href: "/photowall", label: "照片墙", icon: Camera },
