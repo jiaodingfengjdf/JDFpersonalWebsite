@@ -78,7 +78,7 @@ function UserMessage({ message, isLast }: { message: ChatMessage; isLast: boolea
         <AttachmentStrip message={message} />
         {editing ? (
           <div className="bubble-edit">
-            <textarea
+            <textarea className="resize-none"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={Math.min(8, Math.max(2, draft.split('\n').length))}

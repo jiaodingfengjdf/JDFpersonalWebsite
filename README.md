@@ -1,4 +1,4 @@
-# Kirameku
+# JDF 的秘密小窝
 
 TypeScript + Next.js 16 单体应用。公开站点、管理后台和 API 共用同一个进程；数据库为 SQLite（WAL）。
 
@@ -6,11 +6,27 @@ Next.js 与 `eslint-config-next` 固定为同一版本；升级时请同步更�
 
 ## 本地启动
 
-需要 **Node.js 22 LTS**（见 `.nvmrc`；CI 同样使用 22）。从其他 Node 大版本切换后，重新编译 SQLite 原生模块：
+需要 **Node.js 22 LTS**（见 `.nvmrc`）和 **pnpm 11 或 12**。`better-sqlite3` 13 自带 Node-API 二进制，Windows x64 与 Linux x64 可直接安装。
+
+Windows PowerShell 7
+
+```powershell
+pnpm install --frozen-lockfile
+Copy-Item .env.example .env.local
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+# 将生成的内容填入 .env.local 的 AUTH_SECRET
+pnpm db:migrate
+$env:ADMIN_USERNAME = 'admin'
+$env:ADMIN_PASSWORD = Read-Host '输入自定管理员密码（至少 12 位）' -MaskInput
+pnpm db:seed-admin
+Remove-Item Env:ADMIN_PASSWORD
+pnpm dev
+```
+
+Linux / macOS
 
 ```bash
-pnpm install
-pnpm rebuild better-sqlite3
+pnpm install --frozen-lockfile
 cp .env.example .env.local
 # 编辑 .env.local，至少设置 AUTH_SECRET（32+ 字符）
 pnpm db:migrate
@@ -32,6 +48,19 @@ pnpm dev:webpack   # 备用：改用 webpack 开发服务器
 不提供默认管理员密码；`db:seed-admin` 对已存在的用户名会更新密码。
 
 > `.env.local` 由 Next.js 运行时读取；`db:*` / `migrate:*` CLI 脚本只读取当前 shell 环境变量。若修改了 `DATABASE_PATH`，请在命令前显式传入。
+
+生产环境执行 `pnpm db:migrate`、`pnpm build`、`pnpm start`。已有站点先备份 SQLite 和本地上传目录。Docker 构建命令为 `docker build -t kirameku:local .`，容器内将 `/data` 挂载为持久卷，并设置 `AUTH_SECRET` 与对外访问使用的 `FRONTEND_ORIGIN`。
+
+## 兴趣模块
+
+| 入口 | 使用方式 |
+|:--|:--|
+| `/bookmark`、`/admin/collection` | 收藏按类型、分类、标签与关键词分页。后台可导入浏览器导出的 HTML，每次最多 1000 条，按 URL 跳过重复项。新导入的书签默认私密。 |
+| `/search` | 统一查找文章、说说、收藏、书架、影视、游戏、新闻与播客。旧入口 `/explore` 会跳转并保留关键词。 |
+| `/ledger`、`/admin/ledger` | 管理员查看及导出月账单，按北京时间划分月份。通用 CSV 支持 UTF-8 与 GB18030，首行包含 `日期,金额,商家,备注`，后两列可省略。日期为 `YYYY-MM-DD`，支出为负数。导入归入录入表单选中的账户，重复导入同一批流水会跳过。支付宝、微信等原始账单需先转换列。 |
+| `/library`、`/admin/library` | 上传可公开访问的 EPUB 或 TXT，单文件上限 50 MB。阅读位置在当前浏览器保存，管理员可同步到服务端。新文件位于 `UPLOAD_DIR/books`，随上传目录备份。旧文件若仍位于 `public/uploads/books` 可继续访问，迁移部署前请复制到持久卷的 `books` 目录。 |
+| `/market`、`/admin/market` | 查看自选与最近 120 个站内报价快照。成功取得较新报价后才会记录快照。访问量决定采样密度。持仓及成本仅在管理员界面显示。 |
+| `/news`、`/podcast`、`/nba`、`/digest` | 新闻和播客可在后台添加 RSS。赛程依赖 ESPN，行情依赖腾讯数据源。简报聚合本站已有数据，账本部分仅管理员可见。 |
 
 ## 目录
 
@@ -79,11 +108,11 @@ scripts/
 | `pnpm db:backup` | 在线备份 + 完整性校验 |
 | `pnpm db:restore <file>` | 恢复备份（先停应用） |
 
-数据库默认路径 `./data/kirameku.db`，由 `DATABASE_PATH` 覆盖。备份与迁移说明见 [`server/db/README.md`](./server/db/README.md)，整体方案见 [`../docs/单体化重写方案.md`](../docs/单体化重写方案.md)。
+数据库默认路径 `./data/kirameku.db`，由 `DATABASE_PATH` 覆盖。备份与迁移见 [数据库运维说明](./server/db/README.md)，兴趣模块的原始规划见 [兴趣中枢改造方案](./docs/personal-hub-plan.md)。已有 Markdown 文章可放入 `content/posts/` 后运行 `pnpm exec tsx scripts/import-demo-content.ts`。
 
 ## 内置 AI 助理（/assistant）
 
-助理是独立项目 `chatbot私人助理`（Vite + React PWA）的构建产物，放在 `public/assistant/`，不参与本站编译。
+助理源码来自独立项目 `chatbot私人助理`（Vite + React PWA），现由本站的 Next.js 构建并在 `/assistant` 加载。
 
 - 入口：站点导航「助理」→ `/assistant`，同页内渲染（原生 React 路由，不用 iframe、不跳新标签），返回直接点站点导航或浏览器后退。
 - 实现：助理源码整体并入 `app/(site)/assistant/_app`（保留上游结构），`AssistantRuntime.tsx` 以 `dynamic(ssr:false)` 挂载，避免它的 store 在服务端碰 `window`。
@@ -91,8 +120,7 @@ scripts/
 - 布局兜底：`_app/styles/override.css` 把 `.app / .chat-screen` 锁成容器高度，防止底部输入框被裁。
 - 首次使用：页面内「设置」填入 DeepSeek API Key；Key 存在浏览器 IndexedDB，不经过本站服务器。
 - 直连可行：DeepSeek 接口对浏览器 origin 反射 CORS 头，因此不需要服务端代理。
-- 重新构建：在助理项目内执行 `npm run build -- --base=/assistant/`，把 `dist/` 覆盖到本站 `public/assistant/`。
-- 语音输入需要麦克风：`next.config.mjs` 对 `/assistant/:path*` 单独放开 `microphone=(self)`，其余页面仍禁用。
+- 语音输入需要麦克风。`next.config.mjs` 对 `/assistant` 单独放开 `microphone=(self)`。
 
 ### 同步上游助理
 

@@ -68,6 +68,7 @@ export default async function WatchPage({
         {items.map((item) => (
           <article
             key={item.id}
+            id={`watch-${item.id}`}
             className="overflow-hidden rounded-2xl border border-white/40 bg-white/45 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/45"
           >
             <div className="aspect-[2/3] bg-slate-200/60 dark:bg-slate-700/60">

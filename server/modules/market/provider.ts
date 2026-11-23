@@ -114,19 +114,19 @@ export async function getQuotes(
   items: Array<{ kind: MarketKind; code: string }>,
 ): Promise<Map<string, { quote: Quote; stale: boolean }>> {
   const now = Date.now();
-  const symbols = items.map((item) => symbolOf(item.kind, item.code));
+  const symbols = [...new Set(items.map((item) => symbolOf(item.kind, item.code)))];
   const missing = symbols.filter((symbol) => {
     const hit = cache.get(symbol);
     return !hit || now - hit.at > TTL_MS;
   });
 
-  const fresh = missing.length > 0 ? await fetchQuotes(missing) : new Map<string, Quote>();
+  if (missing.length > 0) await fetchQuotes(missing);
   const output = new Map<string, { quote: Quote; stale: boolean }>();
 
   for (const symbol of symbols) {
     const hit = cache.get(symbol);
     if (hit) {
-      output.set(symbol, { quote: hit.quote, stale: !fresh.has(symbol) });
+      output.set(symbol, { quote: hit.quote, stale: Date.now() - hit.at > TTL_MS });
     }
   }
   return output;

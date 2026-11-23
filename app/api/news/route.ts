@@ -1,6 +1,7 @@
 import { handle } from "@/server/http/handler";
 import { itemQuery } from "@/server/modules/feed/contracts";
 import { getFeedService } from "@/server/modules/feed";
+import { getAdminSession } from "@/server/auth/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,11 @@ export async function GET(request: Request) {
       const params = itemQuery.parse(
         Object.fromEntries(new URL(request.url).searchParams),
       );
-      const items = await getFeedService().list(params);
-      return { items };
+      const admin = await getAdminSession();
+      const items = await getFeedService().list(admin ? params : { category: params.category, limit: params.limit });
+      return Response.json({ items: admin ? items : items.map((item) => ({ ...item, read: false, starred: false })) }, {
+        headers: { "cache-control": "private, no-store" },
+      });
     },
     { request },
   );

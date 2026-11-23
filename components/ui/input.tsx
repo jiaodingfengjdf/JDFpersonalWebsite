@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+export type InputProps = React.ComponentProps<"input">;
 
 /** 后台输入框：浅色为玻璃白底，暗色模式回落到深色底。 */
 export function Input({ className, ...props }: InputProps) {

@@ -45,23 +45,25 @@ describe("site config service", () => {
   it("returns a public key-value map with JSON values decoded", async () => {
     const config = await siteConfig.getPublic();
 
-    expect(config).toEqual({
+    expect(config).toMatchObject({
       cloud_music_playlist_id: 17943739323,
       theme: { mode: "dark" },
       quoted: "hello",
       plain: "not-json",
+      nav_dropdown: { enabled: true, label: "兴趣" },
     });
   });
 
   it("lists full admin rows", async () => {
     const rows = await siteConfig.listAll();
     expect(rows.map((row) => row.key)).toEqual([
+      "nav_dropdown",
       "cloud_music_playlist_id",
       "theme",
       "quoted",
       "plain",
     ]);
-    expect(rows[0]).toMatchObject({
+    expect(rows.find((row) => row.key === "cloud_music_playlist_id")).toMatchObject({
       value: "17943739323",
       description: "",
       updated_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),

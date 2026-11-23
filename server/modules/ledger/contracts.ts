@@ -4,13 +4,13 @@ export const ledgerKind = z.enum(["income", "expense"]);
 export type LedgerKind = z.infer<typeof ledgerKind>;
 
 const trimText = (max: number) => z.string().trim().max(max).default("");
-const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
+export const ledgerMonth = z.string().regex(/^[1-9]\d{3}-(0[1-9]|1[0-2])$/);
 
 export const transactionInput = z.object({
   account_id: z.coerce.number().int().positive(),
   category_id: z.coerce.number().int().positive().nullable().default(null),
   kind: ledgerKind,
-  amount: z.coerce.number().positive("金额必须大于 0").max(100_000_000),
+  amount: z.coerce.number().min(0.01, "金额至少为 0.01").max(100_000_000),
   occurred_at: z.coerce.number().int().positive(),
   merchant: trimText(120),
   note: trimText(500),
@@ -21,7 +21,7 @@ export const transactionInput = z.object({
 export type TransactionInput = z.infer<typeof transactionInput>;
 
 export const transactionQuery = z.object({
-  month: z.string().regex(monthPattern).optional(),
+  month: ledgerMonth.optional(),
   account: z.coerce.number().int().positive().optional(),
   category: z.coerce.number().int().positive().optional(),
   kind: ledgerKind.optional(),
@@ -46,7 +46,7 @@ export const categoryInput = z.object({
 
 export const budgetInput = z.object({
   category_id: z.coerce.number().int().positive(),
-  month: z.string().regex(monthPattern),
+  month: ledgerMonth,
   amount: z.coerce.number().min(0).max(100_000_000),
 });
 

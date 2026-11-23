@@ -16,6 +16,7 @@ export const progressInput = z.object({
   unit: z.coerce.number().int().min(0).max(100000),
   offset: z.coerce.number().min(0).max(1).default(0),
   percent: z.coerce.number().min(0).max(100).default(0),
+  location: z.string().max(1024).refine((value) => value === "" || /^epubcfi\(.+\)$/.test(value)).default(""),
 });
 
 export interface LibraryBookView {
@@ -31,5 +32,5 @@ export interface LibraryBookView {
   rating: number;
   note: string;
   updated_at: string;
-  progress: { unit: number; offset: number; percent: number } | null;
+  progress: { unit: number; offset: number; percent: number; location: string } | null;
 }

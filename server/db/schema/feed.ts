@@ -13,8 +13,8 @@ export const feedSource = sqliteTable(
     sort: integer("sort").notNull().default(0),
     lastFetchedAt: integer("last_fetched_at"),
     lastError: text("last_error").notNull().default(""),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [uniqueIndex("uniq_feed_source_url").on(t.url), index("idx_feed_source_cat").on(t.category)],
 );
@@ -35,7 +35,7 @@ export const feedItem = sqliteTable(
     publishedAt: integer("published_at").notNull().default(0),
     read: integer("read").notNull().default(0),
     starred: integer("starred").notNull().default(0),
-    createdAt: createdAt(),
+    createdAt: createdAt().notNull(),
   },
   (t) => [
     uniqueIndex("uniq_feed_item").on(t.sourceId, t.guid),

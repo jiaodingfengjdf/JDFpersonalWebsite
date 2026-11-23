@@ -7,6 +7,45 @@ import { runMigrations } from "@/server/db/migrate";
 import { openDatabase, type DatabaseConnection } from "@/server/db/open";
 import * as schema from "@/server/db/schema";
 import { createSearchService } from "./service";
+import { searchCross } from "./cross";
+import { createCollectionService } from "@/server/modules/collection/service";
+import { collectionQuery } from "@/server/modules/collection/contracts";
+
+describe("public search and collection", () => {
+  it("excludes private collections, drafts and disabled news sources", async () => {
+    await db.insert(schema.collectionItem).values([
+      { title: "验收公开收藏", isPublic: 1, tags: '["验收"]' },
+      { title: "验收私密收藏", isPublic: 0, note: "内部备注" },
+    ]);
+    await db.insert(schema.chatter).values([
+      { content: "验收公开说说", status: "published" },
+      { content: "验收草稿", status: "draft" },
+    ]);
+    const source = await db.insert(schema.feedSource)
+      .values({ name: "停用来源", url: "https://example.com/closed", enabled: 0 })
+      .returning({ id: schema.feedSource.id }).get();
+    await db.insert(schema.feedItem).values({ sourceId: source.id, guid: "item", title: "验收隐藏新闻" });
+
+    const result = await searchCross(db, "验收");
+    expect(result.groups.flatMap((group) => group.items.map((item) => item.title))).toEqual([
+      "验收公开收藏", "验收公开说说",
+    ]);
+    const collection = createCollectionService(db);
+    await expect(collection.list(collectionQuery.parse({ tag: "验" }), { includePrivate: false }))
+      .resolves.toMatchObject({ total: 0, counts: { link: 1 } });
+    await expect(collection.list(collectionQuery.parse({ tag: "验收", page: 2, size: 1 }), { includePrivate: false }))
+      .resolves.toMatchObject({ total: 1, items: [], counts: { link: 1 } });
+  });
+
+  it("matches SQL wildcard characters as ordinary text", async () => {
+    await db.insert(schema.collectionItem).values([
+      { title: "进度 50%", isPublic: 1 },
+      { title: "进度 500", isPublic: 1 },
+    ]);
+    const result = await searchCross(db, "50%");
+    expect(result.groups[0]?.items.map((item) => item.title)).toEqual(["进度 50%"]);
+  });
+});
 
 let directory: string;
 let connection: DatabaseConnection;

@@ -49,6 +49,17 @@ export const collectionIdParams = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+export const bookmarkImportInput = z.object({
+  items: z.array(z.object({
+    title: z.string().trim().min(1).max(200),
+    url: z.httpUrl().max(1000).refine((value) => {
+      const url = new URL(value);
+      return !url.username && !url.password;
+    }),
+  })).min(1).max(1000),
+});
+export type BookmarkImportInput = z.infer<typeof bookmarkImportInput>;
+
 export interface CollectionItem {
   id: number;
   kind: CollectionKind;

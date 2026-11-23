@@ -3,7 +3,13 @@
 autoInstallPeers: false
 
 allowBuilds:
-  better-sqlite3: true
+  # v13 ships Node-API binaries; avoid pnpm's implicit node-gyp install on Windows.
+  better-sqlite3: false
+  core-js: false
+  es5-ext: false
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - dompurify@3.5.0

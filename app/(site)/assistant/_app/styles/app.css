@@ -3642,3 +3642,8 @@ button:not(:disabled):active,
 .settings-pane .set-sec {
   scroll-margin-top: 10px;
 }
+
+* {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}

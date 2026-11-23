@@ -2670,3 +2670,20 @@ button, .chip, .tool-toggle, .week-day, .month-day, .today-task, .suggestion, .a
 }.settings-pane .set-sec{
   scroll-margin-top: 10px;
 }
+
+.messages,
+.drawer,
+.settings-body,
+.agent-body,
+.settings-scroll,
+.drawer-list {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.input-tools,
+.settings-nav-scroll,
+.settings-rail {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: none;
+}

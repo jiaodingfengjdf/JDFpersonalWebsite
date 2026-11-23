@@ -10,7 +10,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: `播客 · ${profile.siteTitle}`, description: "订阅的播客与单集" };
 }
 
-export default async function PodcastPage() {
+export default async function PodcastPage({ searchParams }: {
+  searchParams: Promise<{ show?: string }>;
+}) {
   const admin = await getAdminSession();
-  return <PodcastClient canManage={Boolean(admin)} />;
+  const show = Number((await searchParams).show);
+  const initialShow = Number.isSafeInteger(show) && show > 0 ? show : undefined;
+  return <PodcastClient key={initialShow ?? "all"} canManage={Boolean(admin)} initialShow={initialShow} />;
 }

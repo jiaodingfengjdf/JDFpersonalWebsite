@@ -42,7 +42,8 @@ export default function NewsManager() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const frame = requestAnimationFrame(() => void load());
+    return () => cancelAnimationFrame(frame);
   }, [load]);
 
   async function refresh() {

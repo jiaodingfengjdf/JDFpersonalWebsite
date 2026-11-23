@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { Album } from "@/components/photos/AlbumCard";
-import type { Photo } from "@/data/photos";
+import type { Photo } from "@/types/photo";
 import { getAlbumsService } from "@/server/modules/albums";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import PhotoWallClient from "./PhotoWallClient";
@@ -40,6 +40,9 @@ async function loadAlbums(): Promise<Album[]> {
               id: String(photo.id),
               url: photo.url,
               caption: photo.caption,
+              width: photo.width,
+              height: photo.height,
+              format: photo.format,
               orientation:
                 (photo.orientation as Photo["orientation"]) || "landscape",
             }),

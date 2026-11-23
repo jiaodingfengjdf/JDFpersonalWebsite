@@ -4,7 +4,7 @@ import { collectionQuery } from "@/server/modules/collection/contracts";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import CollectionClient from "./CollectionClient";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { profile } = await loadSiteSettings();
@@ -14,18 +14,36 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function BookmarkPage() {
+export default async function BookmarkPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const service = getCollectionService();
-  const params = collectionQuery.parse({});
+  const raw = await searchParams;
+  const params = collectionQuery.parse({
+    kind: collectionQuery.shape.kind.safeParse(raw.kind).data,
+    category: collectionQuery.shape.category.safeParse(raw.category).data,
+    q: typeof raw.q === "string" ? raw.q.slice(0, 100) : undefined,
+    tag: typeof raw.tag === "string" ? raw.tag.slice(0, 30) : undefined,
+    page: collectionQuery.shape.page.safeParse(raw.page).data,
+    size: 24,
+  });
   const [result, categories] = await Promise.all([
     service.list(params, { includePrivate: false }).catch((error) => {
       console.error("Failed to load collection", error);
-      return { items: [], total: 0, counts: {} as Record<string, number> };
+      return null;
     }),
     service.categories().catch(() => []),
   ]);
 
   return (
-    <CollectionClient items={result.items} counts={result.counts} categories={categories} />
+    <CollectionClient
+      key={JSON.stringify(params)}
+      items={result?.items ?? []}
+      total={result?.total ?? 0}
+      counts={result?.counts ?? {}}
+      failed={!result}
+      categories={categories}
+      filters={params}
+    />
   );
 }

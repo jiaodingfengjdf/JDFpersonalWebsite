@@ -18,8 +18,8 @@ export const libraryBook = sqliteTable(
     status: text("status").notNull().default("reading"),
     rating: integer("rating").notNull().default(0),
     note: text("note").notNull().default(""),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [index("idx_library_status").on(t.status)],
 );
@@ -34,5 +34,6 @@ export const libraryProgress = sqliteTable("library_progress", {
   /** 章内滚动位置 0~1 */
   offset: real("offset").notNull().default(0),
   percent: real("percent").notNull().default(0),
-  updatedAt: updatedAt(),
+  updatedAt: updatedAt().notNull(),
+  location: text("location").notNull().default(""),
 });

@@ -35,7 +35,8 @@ export default function PodcastManager() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const frame = requestAnimationFrame(() => void load());
+    return () => cancelAnimationFrame(frame);
   }, [load]);
 
   async function add() {

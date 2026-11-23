@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { requireAdmin } from "@/server/auth/guard";
 import { errors } from "@/server/http/errors";
@@ -7,6 +6,9 @@ import { handle } from "@/server/http/handler";
 import { assertSameOrigin } from "@/server/http/origin";
 import { assertWritable } from "@/server/http/write-guard";
 import { getLibraryService } from "@/server/modules/library";
+import { getUploadRoot } from "@/server/storage";
+import { removeBookUpload, writeBookUpload } from "@/server/storage/books";
+import { splitChapters } from "@/lib/library-chapters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,12 +18,6 @@ const FORMATS: Record<string, "epub" | "txt"> = {
   ".epub": "epub",
   ".txt": "txt",
 };
-
-/** 粗略统计 TXT 章节数：匹配「第X章/节/回」或 Markdown 一级标题。 */
-function countChapters(text: string): number {
-  const matches = text.match(/^\s*(第[0-9一二三四五六七八九十百千]+[章节回]|#{1,2}\s+\S)/gm);
-  return matches ? Math.max(1, matches.length) : 1;
-}
 
 export async function POST(request: Request) {
   return handle(
@@ -49,29 +45,51 @@ export async function POST(request: Request) {
       const format = FORMATS[ext];
       if (!format) throw errors.badRequest("只支持 EPUB 与 TXT");
       if (file.size > MAX_BYTES) throw errors.payloadTooLarge("书籍文件不能超过 50MB");
+      if (!file.size) throw errors.badRequest("书籍文件为空");
 
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const dir = path.join(process.cwd(), "public", "uploads", "books");
-      await mkdir(dir, { recursive: true });
+      let buffer = Buffer.from(await file.arrayBuffer());
+      let totalUnits = 0;
+      if (format === "txt") {
+        let text: string;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+        } catch {
+          try {
+            text = new TextDecoder("gb18030", { fatal: true }).decode(buffer);
+          } catch {
+            throw errors.badRequest("TXT 必须使用 UTF-8 或 GB18030 编码");
+          }
+        }
+        totalUnits = splitChapters(text).length;
+        if (!totalUnits) throw errors.badRequest("TXT 没有可阅读的内容");
+        buffer = Buffer.from(text, "utf8");
+        if (buffer.length > MAX_BYTES) throw errors.payloadTooLarge("转码后的 TXT 不能超过 50MB");
+      } else if (buffer.length < 4 || buffer.readUInt32LE(0) !== 0x04034b50) {
+        throw errors.badRequest("无法识别 EPUB 文件");
+      }
+      const root = getUploadRoot();
       const filename = `${randomUUID()}${ext}`;
-      await writeFile(path.join(dir, filename), buffer);
+      const fileUrl = `/uploads/books/${filename}`;
 
       const titleFromName = file.name.replace(/\.[^.]+$/, "").trim() || "未命名";
       const authorInput = form.get("author");
       const author = typeof authorInput === "string" ? authorInput.trim().slice(0, 100) : "";
-      const totalUnits = format === "txt" ? countChapters(buffer.toString("utf8")) : 0;
-
-      const created = await getLibraryService().create({
-        title: titleFromName.slice(0, 200),
-        author,
-        format,
-        fileUrl: `/uploads/books/${filename}`,
-        bytes: buffer.length,
-        totalUnits,
-        cover: "",
-      });
-
-      return { ...created, format, bytes: buffer.length, totalUnits };
+      await writeBookUpload(root, filename, buffer);
+      try {
+        const created = await getLibraryService().create({
+          title: titleFromName.slice(0, 200),
+          author,
+          format,
+          fileUrl,
+          bytes: buffer.length,
+          totalUnits,
+          cover: "",
+        });
+        return { ...created, format, bytes: buffer.length, totalUnits };
+      } catch (error) {
+        await removeBookUpload(root, fileUrl).catch((reason) => console.error("Failed to clean up book upload", reason));
+        throw error;
+      }
     },
     { request },
   );

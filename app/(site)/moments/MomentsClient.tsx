@@ -320,7 +320,7 @@ export default function MomentsClient({
               const hasImages = moment.images && moment.images.length > 0;
 
               return (
-                <motion.div key={moment.id} layout
+                <motion.div key={moment.id} id={`moment-${moment.id}`} layout
                   ref={(el) => { if (isExpanded && el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100); }}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0, rotate: isExpanded ? 0 : onlyViewId ? 0 : rot, x: isExpanded ? 0 : onlyViewId ? 0 : offsetX }}

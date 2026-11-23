@@ -1,170 +1,224 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import type { Book, Location, Rendition } from "epubjs";
 import type { LibraryBookView } from "@/server/modules/library/contracts";
+import { splitChapters } from "@/lib/library-chapters";
 
-type Rendition = {
-  display: () => Promise<void>;
-  prev: () => Promise<void>;
-  next: () => Promise<void>;
-  destroy: () => void;
-  on: (event: string, handler: (...args: unknown[]) => void) => void;
-  themes: { default: (styles: Record<string, unknown>) => void };
-};
+type Progress = NonNullable<LibraryBookView["progress"]>;
+const EMPTY_PROGRESS: Progress = { unit: 0, offset: 0, percent: 0, location: "" };
 
-function splitChapters(text: string): string[] {
-  const matches = [...text.matchAll(/^\s*(第[0-9一二三四五六七八九十百千]+[章节回]|#{1,2}\s+\S.*)$/gm)];
-  if (matches.length < 2) return [text];
-  const chapters: string[] = [];
-  for (let index = 0; index < matches.length; index += 1) {
-    const start = matches[index].index ?? 0;
-    const end = index + 1 < matches.length ? (matches[index + 1].index ?? text.length) : text.length;
-    chapters.push(text.slice(start, end));
+function readProgress(key: string, fallback: Progress | null, allowLegacy: boolean): Progress {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const { unit, location }: Progress = JSON.parse(saved);
+      if (Number.isSafeInteger(unit) && unit >= 0 && typeof location === "string") {
+        return { ...EMPTY_PROGRESS, unit, location };
+      }
+    }
+    if (allowLegacy) {
+      const legacy = localStorage.getItem(key.replace(/-v2-(?:owner|guest)-/, "-"));
+      if (legacy !== null && /^\d+$/.test(legacy)) return { ...EMPTY_PROGRESS, unit: Number(legacy) };
+    }
+  } catch {
+    // Storage may be unavailable in private browsing.
   }
-  return chapters;
+  return fallback ?? EMPTY_PROGRESS;
 }
 
 export default function Reader({ book, canPersist }: { book: LibraryBookView; canPersist: boolean }) {
-  const [text, setText] = useState<string[]>([]);
-  const [unit, setUnit] = useState(book.progress?.unit ?? 0);
+  const [chapters, setChapters] = useState<string[]>([]);
+  const [progress, setProgress] = useState(EMPTY_PROGRESS);
+  const [total, setTotal] = useState(1);
+  const [boundaries, setBoundaries] = useState({ start: true, end: true });
   const [loading, setLoading] = useState(true);
+  const [turning, setTurning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncFailed, setSyncFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
-  const total = book.format === "txt" ? Math.max(1, text.length) : Math.max(1, book.total_units || 1);
+  const progressQueue = useRef(Promise.resolve());
+  const latestProgress = useRef<Progress | null>(null);
+  const textRef = useRef<HTMLElement>(null);
+  const progressKey = `library-progress-v2-${canPersist ? "owner" : "guest"}-${book.id}`;
 
-  const saveProgress = useCallback(
-    (nextUnit: number, percent: number) => {
-      localStorage.setItem(`library-progress-${book.id}`, String(nextUnit));
-      if (!canPersist) return;
-      void fetch(`/api/admin/library/${book.id}/progress`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ unit: nextUnit, offset: 0, percent }),
-      }).catch(() => undefined);
-    },
-    [book.id, canPersist],
-  );
+  const saveProgress = useCallback((next: Progress) => {
+    try {
+      localStorage.setItem(progressKey, JSON.stringify(next));
+    } catch {
+      // The reader remains usable without local storage.
+    }
+    if (!canPersist) return;
+
+    latestProgress.current = next;
+    progressQueue.current = progressQueue.current.then(async () => {
+      if (latestProgress.current !== next) return;
+      try {
+        const response = await fetch(`/api/admin/library/${book.id}/progress`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(next),
+          keepalive: true,
+          signal: AbortSignal.timeout(10_000),
+        });
+        setSyncFailed(!response.ok);
+      } catch {
+        setSyncFailed(true);
+      }
+    });
+  }, [book.id, canPersist, progressKey]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    let epub: Book | undefined;
+    const start = readProgress(progressKey, canPersist ? book.progress : null, book.format === "txt");
 
     async function boot() {
-      setLoading(true);
-      setError(null);
       try {
+        if (book.format !== "epub" && book.format !== "txt") {
+          throw new Error("此格式暂不支持在线阅读。");
+        }
+        const response = await fetch(book.file_url, { signal: controller.signal });
+        if (!response.ok) throw new Error("书籍文件无法读取，请重试或重新上传。");
+
         if (book.format === "txt") {
-          const response = await fetch(book.file_url);
-          const raw = await response.text();
-          if (cancelled) return;
-          const chapters = splitChapters(raw);
-          setText(chapters);
-          const saved = Number(localStorage.getItem(`library-progress-${book.id}`));
-          const start = Number.isFinite(saved) ? Math.min(chapters.length - 1, Math.max(0, saved)) : (book.progress?.unit ?? 0);
-          setUnit((previous) => (previous === 0 ? start : previous));
-        } else if (book.format === "epub") {
-          const mod = (await import("epubjs")) as unknown as {
-            default: (url: string) => {
-              renderTo: (element: HTMLElement, options?: Record<string, unknown>) => Rendition;
-              destroy: () => void;
-            };
-          };
-          if (cancelled || !viewerRef.current) return;
-          const epub = mod.default(book.file_url);
-          const rendition = epub.renderTo(viewerRef.current, {
-            width: "100%",
-            height: "100%",
-            flow: "scrolled-doc",
-          });
-          rendition.themes.default({ body: { padding: "0 8px", "line-height": "1.9" } });
-          await rendition.display();
-          renditionRef.current = rendition;
+          const parts = splitChapters(await response.text());
+          if (!parts.length) throw new Error("这份 TXT 没有可阅读的内容。");
+          if (controller.signal.aborted) return;
+          const unit = Math.min(start.unit, parts.length - 1);
+          setChapters(parts);
+          setTotal(parts.length);
+          setProgress({ ...EMPTY_PROGRESS, unit, percent: ((unit + 1) / parts.length) * 100 });
         } else {
-          setError("该格式暂不支持在线阅读");
+          const [{ default: openEpub }, bytes] = await Promise.all([import("epubjs"), response.arrayBuffer()]);
+          if (controller.signal.aborted || !viewerRef.current) return;
+          epub = openEpub();
+          await epub.open(bytes, "binary");
+          if (controller.signal.aborted) return;
+          let sections = 0;
+          epub.spine.each(() => { sections += 1; });
+          if (!sections) throw new Error("EPUB 没有可阅读的章节。");
+          setTotal(sections);
+
+          const rendition = epub.renderTo(viewerRef.current, {
+            width: "100%", height: "100%", flow: "paginated", spread: "none", allowScriptedContent: false,
+          });
+          renditionRef.current = rendition;
+          rendition.themes.default({ body: { padding: "0 8px", "line-height": "1.9" } });
+          let initialLocation = true;
+          rendition.on("relocated", (location: Location) => {
+            if (controller.signal.aborted || !location.start) return;
+            const { index, cfi, displayed } = location.start;
+            const offset = displayed ? displayed.page / Math.max(1, displayed.total) : 1;
+            const next = {
+              unit: Math.max(0, index),
+              offset: Math.min(1, Math.max(0, offset)),
+              percent: location.atEnd ? 100 : Math.min(100, ((index + offset) / sections) * 100),
+              location: typeof cfi === "string" && cfi.length <= 1024 ? cfi : "",
+            };
+            setBoundaries({ start: location.atStart, end: location.atEnd });
+            setProgress(next);
+            if (!initialLocation) saveProgress(next);
+            initialLocation = false;
+          });
+
+          try {
+            if (start.location) await rendition.display(start.location);
+            else if (start.unit > 0 && start.unit < sections) await rendition.display(start.unit);
+            else await rendition.display();
+          } catch {
+            await rendition.display();
+          }
         }
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "加载失败");
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "加载失败");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
     void boot();
     return () => {
-      cancelled = true;
-      renditionRef.current?.destroy();
+      controller.abort();
+      epub?.destroy();
       renditionRef.current = null;
     };
-  }, [book.id, book.format, book.file_url, book.progress?.unit]);
+  }, [attempt, book.file_url, book.format, book.progress, canPersist, progressKey, saveProgress]);
 
-  const percent = useMemo(() => Math.min(100, ((unit + 1) / total) * 100), [unit, total]);
-
-  function go(delta: number) {
-    const next = Math.min(total - 1, Math.max(0, unit + delta));
-    if (next === unit) return;
-    setUnit(next);
-    if (book.format === "epub") {
-      void (delta > 0 ? renditionRef.current?.next() : renditionRef.current?.prev());
+  async function go(delta: -1 | 1) {
+    if (loading || turning) return;
+    if (book.format === "txt") {
+      const unit = Math.min(total - 1, Math.max(0, progress.unit + delta));
+      if (unit === progress.unit) return;
+      const next = { ...EMPTY_PROGRESS, unit, percent: ((unit + 1) / total) * 100 };
+      setProgress(next);
+      textRef.current?.scrollTo(0, 0);
+      saveProgress(next);
+      return;
     }
-    saveProgress(next, Math.min(100, ((next + 1) / total) * 100));
+
+    setTurning(true);
+    try {
+      if (delta > 0) await renditionRef.current?.next();
+      else await renditionRef.current?.prev();
+    } catch {
+      setError("无法翻页，请重新加载书籍。");
+    } finally {
+      setTurning(false);
+    }
   }
 
+  const epub = book.format === "epub";
+  const controlsDisabled = loading || turning || Boolean(error);
+  const controlClass = "inline-flex min-h-10 items-center gap-1 rounded-full border border-white/50 bg-white/60 px-3 text-sm text-slate-700 disabled:opacity-50 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200";
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 relative z-10 sm:px-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <Link href="/library" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-sky-500">
-          <ArrowLeft className="h-4 w-4" />
-          书架
+    <div className="relative z-10 mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <Link href="/library" className="inline-flex shrink-0 items-center gap-1 text-sm text-slate-600 hover:text-sky-600 dark:text-slate-300">
+          <ArrowLeft className="size-4" /> 书架
         </Link>
         <div className="min-w-0 text-right">
-          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{book.title}</p>
-          <p className="text-xs text-slate-400">
-            {book.author || "佚名"} · {unit + 1}/{total}
-          </p>
+          <h1 className="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">{book.title}</h1>
+          <p className="text-xs text-slate-600 dark:text-slate-300">{book.author || "佚名"}</p>
         </div>
       </div>
 
-      <div className="mb-3 h-1 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/70">
-        <div className="h-full rounded-full bg-sky-500" style={{ width: `${percent}%` }} />
-      </div>
+      {error && <p role="alert" className="mb-3 rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-900 dark:bg-rose-950 dark:text-rose-100">
+        {error}{" "}
+        <button className="underline" type="button" onClick={() => {
+          setError(null);
+          setLoading(true);
+          setAttempt((value) => value + 1);
+        }}>重试</button>
+      </p>}
+      {loading && <p role="status" className="py-4 text-center text-sm text-slate-600 dark:text-slate-300">正在加载书籍…</p>}
+      {syncFailed && <p role="status" className="mb-3 text-sm text-amber-800 dark:text-amber-200">
+        同步失败，可在当前浏览器继续阅读。{" "}
+        <button type="button" className="underline" onClick={() => saveProgress(progress)}>重试同步</button>
+      </p>}
 
-      {error && (
-        <p className="mb-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-600">{error}</p>
-      )}
-      {loading && <p className="py-10 text-center text-sm text-slate-500">加载中…</p>}
-
-      {book.format === "txt" ? (
-        <article className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap rounded-2xl border border-white/40 bg-white/55 p-5 text-[15px] leading-8 text-slate-800 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-200">
-          {text[unit] ?? ""}
+      {epub ? (
+        <div ref={viewerRef} className="h-[65dvh] min-h-64 overflow-hidden rounded-2xl border border-white/40 bg-white p-2 text-slate-900 sm:p-4" />
+      ) : !loading && !error && (
+        <article ref={textRef} tabIndex={0} aria-label="章节正文" className="max-h-[65dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl border border-white/40 bg-white/80 p-5 text-[15px] leading-8 text-slate-800 [user-select:text] dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-100">
+          {chapters[progress.unit]}
         </article>
-      ) : (
-        <div
-          ref={viewerRef}
-          className="h-[70vh] overflow-hidden rounded-2xl border border-white/40 bg-white/70 p-4 dark:border-white/10 dark:bg-slate-800/60"
-        />
       )}
 
-      <div className="mt-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => go(-1)}
-          disabled={unit <= 0}
-          className="inline-flex items-center gap-1 rounded-full border border-white/40 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40 dark:border-white/10 dark:text-slate-300"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          上一章
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <button type="button" className={controlClass} onClick={() => void go(-1)} disabled={controlsDisabled || (epub ? boundaries.start : progress.unit <= 0)}>
+          <ChevronLeft className="size-4" /> {epub ? "上一页" : "上一章"}
         </button>
-        <span className="text-xs text-slate-400">{percent.toFixed(0)}%</span>
-        <button
-          type="button"
-          onClick={() => go(1)}
-          disabled={unit >= total - 1}
-          className="inline-flex items-center gap-1 rounded-full border border-white/40 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40 dark:border-white/10 dark:text-slate-300"
-        >
-          下一章
-          <ChevronRight className="h-4 w-4" />
+        {!loading && !error && <p className="text-center text-xs text-slate-600 dark:text-slate-300" aria-live="polite">
+          {progress.unit + 1} / {total} · {progress.percent.toFixed(0)}%
+        </p>}
+        <button type="button" className={controlClass} onClick={() => void go(1)} disabled={controlsDisabled || (epub ? boundaries.end : progress.unit >= total - 1)}>
+          {epub ? "下一页" : "下一章"} <ChevronRight className="size-4" />
         </button>
       </div>
     </div>

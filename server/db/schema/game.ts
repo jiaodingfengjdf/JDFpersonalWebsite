@@ -15,8 +15,8 @@ export const gameItem = sqliteTable(
     note: text("note").notNull().default(""),
     startedAt: integer("started_at"),
     finishedAt: integer("finished_at"),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [index("idx_game_status").on(t.status)],
 );

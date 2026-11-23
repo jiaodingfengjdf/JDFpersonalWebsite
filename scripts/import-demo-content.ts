@@ -1,14 +1,7 @@
 /**
- * 把仓库自带的演示内容导入 SQLite：
- *   1. content/posts/*.md          → post（含 frontmatter 的标题/分类/标签/发布时间）
- *   2. data/posts.ts               → post（元数据 + 由摘要生成的占位正文）
- *   3. data/moments.ts             → chatter（说说）
- *   4. data/chatters.ts            → chatter（旧版标题+摘要）
- *   5. data/photos.ts              → album + photo（按日期分相册，本地 /images/*.webp）
- *   6. data/albums.ts              → album + photo（远程演示图）
- *
- * 幂等：按 slug / 标题 / 正文去重，重复执行只补缺，不重复插入。
- * 用法：npx tsx scripts/import-demo-content.ts [--force]
+ * 将 content/posts/*.md 的 Markdown 正文和 frontmatter 导入 SQLite。
+ * 按 slug 去重，可传 --force 更新已有文章。
+ * 用法：pnpm exec tsx scripts/import-demo-content.ts [--force]
  */
 
 import fs from "node:fs";
@@ -19,13 +12,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { eq, sql } from "drizzle-orm";
 import { openDatabase } from "../server/db/open";
 import * as schema from "../server/db/schema";
-import { postsData } from "../data/posts";
-import { momentsData } from "../data/moments";
-import { chattersData } from "../data/chatters";
-import { photoDays } from "../data/photos";
-import { albums } from "../data/albums";
 
-const { post, postTag, postRevision, category, tag, chatter, album, photo } = schema;
+const { post, postTag, postRevision, category, tag } = schema;
 
 /** CLI 脚本只读 shell 环境；与 seed-admin 一致，只补 DATABASE_PATH。 */
 function loadDatabasePathFromEnv(): string {
@@ -50,7 +38,7 @@ const connection = openDatabase(dbPath);
 const db = drizzle(connection, { schema });
 
 const force = process.argv.includes("--force");
-const stats = { posts: 0, skippedPosts: 0, chatters: 0, albums: 0, photos: 0 };
+const stats = { posts: 0, skippedPosts: 0 };
 
 function slugify(name: string): string {
   return name
@@ -247,143 +235,6 @@ async function importMarkdownPosts(): Promise<void> {
   }
 }
 
-async function importDemoPosts(): Promise<void> {
-  let index = 0;
-  for (const demo of postsData) {
-    const cover = demo.cover.startsWith("https://picsum.photos")
-      ? localCovers[index % localCovers.length]!
-      : demo.cover;
-    const body = [
-      `## ${demo.title}`,
-      "",
-      demo.description,
-      "",
-      "> 这是仓库自带的演示文章：正文由 `data/posts.ts` 的摘要生成，可在后台补充完整内容。",
-      "",
-      "### 相关标签",
-      "",
-      ...demo.tags.map((name: string) => `- ${name}`),
-    ].join("\n");
-
-    await upsertPost({
-      title: demo.title,
-      slug: demo.slug,
-      description: demo.description,
-      content: body,
-      cover,
-      categoryName: demo.category,
-      tags: demo.tags,
-      status: "published",
-      isPinned: false,
-      publishedAt: new Date(demo.date),
-    });
-    index += 1;
-  }
-}
-
-async function importChatters(): Promise<void> {
-  const existing = await db.select({ content: chatter.content }).from(chatter);
-  const seen = new Set(existing.map((row) => row.content));
-
-  for (const moment of momentsData) {
-    if (seen.has(moment.content)) continue;
-    await db.insert(chatter).values({
-      content: moment.content,
-      images: JSON.stringify(moment.images ?? []),
-      mood: moment.mood ?? "",
-      likes: moment.likes ?? 0,
-      status: "published",
-      createdAt: new Date(moment.created_at),
-      updatedAt: new Date(moment.created_at),
-    });
-    seen.add(moment.content);
-    stats.chatters += 1;
-  }
-
-  for (const old of chattersData) {
-    const content = `**${old.title}**\n\n${old.description}`;
-    if (seen.has(content)) continue;
-    await db.insert(chatter).values({
-      content,
-      images: "[]",
-      mood: "",
-      likes: 0,
-      status: "published",
-      createdAt: new Date(old.date),
-      updatedAt: new Date(old.date),
-    });
-    seen.add(content);
-    stats.chatters += 1;
-  }
-}
-
-async function importAlbums(): Promise<void> {
-  const existing = new Set(
-    (await db.select({ title: album.title }).from(album)).map((row) => row.title),
-  );
-
-  const insertAlbum = async (input: {
-    title: string;
-    description: string;
-    cover: string;
-    createdAt: Date;
-    photos: Array<{ url: string; caption?: string; orientation?: string }>;
-  }) => {
-    if (existing.has(input.title)) return;
-    const [row] = await db
-      .insert(album)
-      .values({
-        title: input.title,
-        description: input.description,
-        cover: input.cover,
-        photoCount: input.photos.length,
-        sort: 0,
-        createdAt: input.createdAt,
-        updatedAt: input.createdAt,
-      })
-      .returning({ id: album.id });
-
-    let sort = 0;
-    for (const item of input.photos) {
-      await db.insert(photo).values({
-        albumId: row!.id,
-        url: item.url,
-        caption: item.caption ?? "",
-        orientation: item.orientation ?? "landscape",
-        sort: sort++,
-        createdAt: input.createdAt,
-      });
-      stats.photos += 1;
-    }
-    existing.add(input.title);
-    stats.albums += 1;
-  };
-
-  for (const day of photoDays) {
-    await insertAlbum({
-      title: day.label,
-      description: `${day.date} 拍摄`,
-      cover: day.photos[0]?.url ?? "",
-      createdAt: new Date(`${day.date}T12:00:00`),
-      photos: day.photos.map((item) => ({
-        url: item.url,
-        caption: item.caption,
-        orientation: item.orientation,
-      })),
-    });
-  }
-
-  for (const item of albums) {
-    await insertAlbum({
-      title: item.title,
-      description: item.description,
-      cover: item.cover,
-      createdAt: new Date(`${item.date.replace(/[^0-9]/g, "-").replace(/-$/, "")}-01T12:00:00`),
-      photos: item.photos.map((entry) => ({ url: entry.url, caption: entry.caption })),
-    });
-  }
-}
-
 async function recomputeCounts(): Promise<void> {
   await db.run(sql`
     UPDATE category SET post_count = (
@@ -398,23 +249,13 @@ async function recomputeCounts(): Promise<void> {
       WHERE post_tag.tag_id = tag.id AND post.status = 'published'
     )
   `);
-  await db.run(sql`
-    UPDATE album SET photo_count = (
-      SELECT count(*) FROM photo WHERE photo.album_id = album.id
-    )
-  `);
+
 }
 
 async function main(): Promise<void> {
   console.log(`数据库：${dbPath}`);
   console.log("· 导入 content/posts/*.md");
   await importMarkdownPosts();
-  console.log("· 导入 data/posts.ts 演示文章");
-  await importDemoPosts();
-  console.log("· 导入说说 data/moments.ts + data/chatters.ts");
-  await importChatters();
-  console.log("· 导入相册 data/photos.ts + data/albums.ts");
-  await importAlbums();
   await recomputeCounts();
 
   const [counts] = await db
@@ -423,24 +264,17 @@ async function main(): Promise<void> {
       published: sql<number>`(SELECT count(*) FROM post WHERE status = 'published')`,
       categories: sql<number>`(SELECT count(*) FROM category)`,
       tags: sql<number>`(SELECT count(*) FROM tag)`,
-      chatters: sql<number>`(SELECT count(*) FROM chatter)`,
-      albums: sql<number>`(SELECT count(*) FROM album)`,
-      photos: sql<number>`(SELECT count(*) FROM photo)`,
     })
     .from(sql`(SELECT 1)`);
 
   console.log("\n导入结果：", {
     新增文章: stats.posts,
     跳过已存在: stats.skippedPosts,
-    新增说说: stats.chatters,
-    新增相册: stats.albums,
-    新增照片: stats.photos,
   });
   console.log("库内统计：", counts);
-  connection.close();
 }
 
 main().catch((error) => {
   console.error("导入失败：", error);
-  process.exit(1);
-});
+  process.exitCode = 1;
+}).finally(() => connection.close());

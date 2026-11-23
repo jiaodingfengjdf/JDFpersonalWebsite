@@ -15,7 +15,6 @@ import RadialMenu from "@/components/ui/RadialMenu";
 import MouseTrail from "@/components/ui/MouseTrail";
 import SeasonalEffect from "@/components/ui/SeasonalEffect";
 import KiraSparkle from "@/components/ui/KiraSparkle";
-import WelcomeScreen from "@/components/layout/WelcomeScreen";
 import VisitorTracker from "@/components/layout/VisitorTracker";
 import { WELCOME_SESSION_KEY } from "@/lib/welcome";
 import { loadSiteSettings } from "@/server/modules/site-settings";
@@ -49,13 +48,12 @@ export default async function SiteLayout({
       */}
       <script
         dangerouslySetInnerHTML={{
-          __html: `try{var s=sessionStorage.getItem(${JSON.stringify(WELCOME_SESSION_KEY)});if(s){document.documentElement.classList.add("welcome-seen")}else{sessionStorage.setItem(${JSON.stringify(WELCOME_SESSION_KEY)},"1")}}catch(e){}try{var t=localStorage.getItem("theme-mode")||${JSON.stringify(bootMode)};if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.dataset.theme=t;localStorage.setItem("theme",t);}catch(e){}`,
+          __html: `try{var s=sessionStorage.getItem(${JSON.stringify(WELCOME_SESSION_KEY)});if(s||location.pathname!=="/"){document.documentElement.classList.add("welcome-seen")}else{sessionStorage.setItem(${JSON.stringify(WELCOME_SESSION_KEY)},"1")}}catch(e){}try{var t=localStorage.getItem("theme-mode")||${JSON.stringify(bootMode)};if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.dataset.theme=t;localStorage.setItem("theme",t);}catch(e){}`,
         }}
       />
       <ThemePresetProvider active={themes.active} presets={themes.presets}>
         <ThemeProvider>
         <EffectProvider>
-          {process.env.WELCOME_DISABLED === "1" ? null : <WelcomeScreen />}
         <BackgroundProvider>
           <MusicProvider>
             <ToastProvider>

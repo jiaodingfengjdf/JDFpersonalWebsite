@@ -21,9 +21,11 @@ export default function NbaManager() {
     setLoading(true);
     setError(null);
     try {
-      const json = await adminRequest<{ games: NbaGameView[]; teams: NbaTeam[] }>("/api/nba");
+      const [json, all] = await Promise.all([
+        adminRequest<{ games: NbaGameView[]; teams: NbaTeam[] }>("/api/nba"),
+        adminRequest<NbaTeam[]>("/api/admin/nba/teams").catch(() => null),
+      ]);
       setGames(json.games);
-      const all = await adminRequest<NbaTeam[]>("/api/admin/nba/teams").catch(() => null);
       if (all) setTeams(all);
     } catch (reason) {
       setError(describeAdminError(reason));
@@ -33,10 +35,8 @@ export default function NbaManager() {
   }, []);
 
   useEffect(() => {
-    void load();
-    void adminRequest<NbaTeam[]>("/api/admin/nba/teams")
-      .then(setTeams)
-      .catch(() => undefined);
+    const frame = requestAnimationFrame(() => void load());
+    return () => cancelAnimationFrame(frame);
   }, [load]);
 
   async function sync() {

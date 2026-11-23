@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
 import { libraryBook, libraryProgress } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -22,7 +22,7 @@ function toView(book: BookRow, progress: ProgressRow | undefined): LibraryBookVi
     note: book.note,
     updated_at: (book.updatedAt ?? new Date(0)).toISOString(),
     progress: progress
-      ? { unit: progress.unit, offset: progress.offset, percent: progress.percent }
+      ? { unit: progress.unit, offset: progress.offset, percent: progress.percent, location: progress.location }
       : null,
   };
 }
@@ -96,7 +96,7 @@ export function createLibraryService(db: AppDatabase) {
 
     async saveProgress(
       bookId: number,
-      input: { unit: number; offset: number; percent: number },
+      input: { unit: number; offset: number; percent: number; location: string },
     ) {
       const now = new Date();
       await db
@@ -106,6 +106,7 @@ export function createLibraryService(db: AppDatabase) {
           unit: input.unit,
           offset: input.offset,
           percent: input.percent,
+          location: input.location,
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -114,6 +115,7 @@ export function createLibraryService(db: AppDatabase) {
             unit: input.unit,
             offset: input.offset,
             percent: input.percent,
+            location: input.location,
             updatedAt: now,
           },
         });

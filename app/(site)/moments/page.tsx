@@ -17,11 +17,16 @@ export default async function MomentsPage({
       ? String(parsedOnlyView)
       : null;
 
-  const chatters = await getChattersService().list({
+  const service = getChattersService();
+  const chatters = await service.list({
     status: "published",
     page: 1,
     size: 50,
   });
+  if (initialOnlyView && !chatters.some((item) => String(item.id) === initialOnlyView)) {
+    const item = await service.getById(parsedOnlyView, { publishedOnly: true }).catch(() => null);
+    if (item) chatters.push(item);
+  }
 
   return (
     <MomentsClient

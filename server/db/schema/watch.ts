@@ -16,8 +16,8 @@ export const watchItem = sqliteTable(
     note: text("note").notNull().default(""),
     /** 剧集进度，例如 S02E03 */
     progress: text("progress").notNull().default(""),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [index("idx_watch_status").on(t.status)],
 );

@@ -1,9 +1,7 @@
 # Production image for the single-process Next.js application.
 #
 # Build from the repository root:
-#   docker compose build
-# or directly:
-#   docker build -t kirameku:local ./Kirameku
+#   docker build -t kirameku:local .
 
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm \

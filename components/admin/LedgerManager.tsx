@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Download, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import AdminError from "./AdminError";
 import AdminPageHeader from "./AdminPageHeader";
 import { useConfirm } from "./ConfirmProvider";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ledgerDate, parseLedgerDate } from "@/lib/ledger-date";
 import type {
   LedgerAccount,
   LedgerCategory,
@@ -21,8 +22,7 @@ const money = (value: number) =>
   value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function today() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return ledgerDate();
 }
 
 function currentMonth() {
@@ -54,6 +54,7 @@ export default function LedgerManager() {
   const [newCategory, setNewCategory] = useState({ name: "", kind: "expense" as "expense" | "income" });
   const [budget, setBudget] = useState({ categoryId: "", amount: "" });
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,7 +85,8 @@ export default function LedgerManager() {
   }, [month]);
 
   useEffect(() => {
-    void load();
+    const frame = requestAnimationFrame(() => void load());
+    return () => cancelAnimationFrame(frame);
   }, [load]);
 
   const categoryOptions = useMemo(
@@ -104,7 +106,7 @@ export default function LedgerManager() {
           category_id: form.categoryId ? Number(form.categoryId) : null,
           kind: form.kind,
           amount: Number(form.amount),
-          occurred_at: new Date(`${form.date}T12:00:00`).getTime(),
+          occurred_at: parseLedgerDate(form.date),
           merchant: form.merchant,
           note: form.note,
           tags: [],
@@ -178,41 +180,29 @@ export default function LedgerManager() {
 
   async function importCsv(file: File) {
     setImportMessage(null);
-    const text = await file.text();
-    const rows = text
-      .split(/\r?\n/)
-      .slice(1)
-      .map((line) => line.split(","))
-      .filter((cols) => cols.length >= 2 && cols[0].trim())
-      .map((cols) => {
-        const date = cols[0].trim();
-        const amount = Number(cols[1]);
-        return {
-          account_id: Number(form.accountId || accounts[0]?.id),
-          category_id: null,
-          kind: amount >= 0 ? "income" : "expense",
-          amount: Math.abs(amount),
-          occurred_at: new Date(`${date.includes("T") ? date : `${date}T12:00:00`}`).getTime(),
-          merchant: (cols[2] ?? "").trim(),
-          note: (cols[3] ?? "").trim(),
-          tags: [],
-        };
-      })
-      .filter((row) => Number.isFinite(row.amount) && row.amount > 0 && Number.isFinite(row.occurred_at));
-
-    if (rows.length === 0) {
-      setImportMessage("没有解析到有效行（列顺序：日期,金额,商家,备注；负数表示支出）");
+    if (!form.accountId || file.size > 512 * 1024) {
+      setImportMessage("请选择目标账户，CSV 文件大小上限为 512 KB。");
       return;
     }
+    setImporting(true);
     try {
+      const bytes = await file.arrayBuffer();
+      let csv: string;
+      try {
+        csv = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        csv = new TextDecoder("gb18030", { fatal: true }).decode(bytes);
+      }
       const result = await adminRequest<{ inserted: number; skipped: number }>(
         "/api/admin/ledger/import",
-        { method: "POST", body: JSON.stringify({ rows }) },
+        { method: "POST", body: JSON.stringify({ csv, account_id: Number(form.accountId) }) },
       );
       setImportMessage(`导入完成：新增 ${result.inserted} 条，跳过 ${result.skipped} 条`);
       await load();
     } catch (reason) {
       setImportMessage(describeAdminError(reason));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -223,9 +213,10 @@ export default function LedgerManager() {
         title="记账"
         description="账户、分类、流水、预算与账单导入；前台 /ledger 只对登录后的你可见。"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="month"
+              aria-label="账单月份"
               value={month}
               onChange={(event) => setMonth(event.target.value || currentMonth())}
               className="h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -234,6 +225,14 @@ export default function LedgerManager() {
               <RefreshCw className="mr-1 h-4 w-4" />
               刷新
             </Button>
+            <a
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent focus-visible:outline-2 focus-visible:outline-sky-500"
+              href={`/api/admin/ledger/export?month=${encodeURIComponent(month)}`}
+              download
+            >
+              <Download className="size-4" />
+              导出本月 CSV
+            </a>
           </div>
         }
       />
@@ -434,15 +433,16 @@ export default function LedgerManager() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>本月流水（{txns.length}）</CardTitle>
-          <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <label className="inline-flex cursor-pointer items-center gap-1 rounded-md text-xs text-muted-foreground hover:text-foreground focus-within:outline-2 focus-within:outline-sky-500">
             <Upload className="h-3.5 w-3.5" />
-            导入 CSV
+            {importing ? "正在导入…" : "导入 CSV"}
             <input
               type="file"
               accept=".csv,text/csv"
-              className="hidden"
+              className="sr-only"
+              disabled={importing}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) void importCsv(file);
@@ -452,8 +452,11 @@ export default function LedgerManager() {
           </label>
         </CardHeader>
         <div className="p-4 pt-0">
+          <p className="mb-2 text-xs text-muted-foreground">
+            导入到录入表单选中的账户。CSV 首行包含日期、金额，可附商家、备注。日期用 YYYY-MM-DD，支出用负数。
+          </p>
           {importMessage && (
-            <p className="mb-2 text-xs text-muted-foreground">{importMessage}</p>
+            <p role="status" className="mb-2 text-xs text-muted-foreground">{importMessage}</p>
           )}
           {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
           {!loading && txns.length === 0 && (
@@ -464,6 +467,7 @@ export default function LedgerManager() {
               <div key={item.id} className="flex items-center gap-3 py-2">
                 <span className="w-20 shrink-0 text-xs text-muted-foreground">
                   {new Date(item.occurred_at).toLocaleDateString("zh-CN", {
+                    timeZone: "Asia/Shanghai",
                     month: "2-digit",
                     day: "2-digit",
                   })}
@@ -482,7 +486,7 @@ export default function LedgerManager() {
                   {item.kind === "income" ? "+" : "-"}
                   {money(item.amount)}
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => void remove(item)}>
+                <Button variant="ghost" size="sm" aria-label="删除流水" onClick={() => void remove(item)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>

@@ -10,8 +10,8 @@ export const ledgerAccount = sqliteTable("ledger_account", {
   currency: text("currency").notNull().default("CNY"),
   sort: integer("sort").notNull().default(0),
   archived: integer("archived").notNull().default(0),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
+  createdAt: createdAt().notNull(),
+  updatedAt: updatedAt().notNull(),
 });
 
 /** 分类：餐饮/交通/工资… */
@@ -24,8 +24,8 @@ export const ledgerCategory = sqliteTable(
     icon: text("icon").notNull().default(""),
     parentId: integer("parent_id"),
     sort: integer("sort").notNull().default(0),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [index("idx_ledger_category_kind").on(t.kind, t.sort)],
 );
@@ -50,8 +50,8 @@ export const ledgerTxn = sqliteTable(
     tags: text("tags").notNull().default("[]"),
     /** 导入去重键（支付宝/微信账单流水号） */
     externalId: text("external_id"),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [
     index("idx_ledger_txn_time").on(t.occurredAt),
@@ -70,8 +70,8 @@ export const ledgerBudget = sqliteTable(
       .references(() => ledgerCategory.id, { onDelete: "cascade" }),
     month: text("month").notNull(),
     amount: real("amount").notNull(),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [uniqueIndex("uniq_ledger_budget").on(t.categoryId, t.month)],
 );

@@ -313,7 +313,7 @@ export default function Composer() {
         />
 
         <div className="input-wrap">
-          <textarea
+          <textarea className="resize-none"
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}

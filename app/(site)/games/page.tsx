@@ -68,6 +68,7 @@ export default async function GamesPage() {
                 {group.list.map((item) => (
                   <div
                     key={item.id}
+                    id={`game-${item.id}`}
                     className="flex gap-3 rounded-2xl border border-white/40 bg-white/45 p-3 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/45"
                   >
                     <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-slate-200/60 dark:bg-slate-700/60">

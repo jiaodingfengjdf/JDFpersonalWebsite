@@ -5,18 +5,29 @@ import { assertSameOrigin } from "@/server/http/origin";
 import { assertWritable } from "@/server/http/write-guard";
 import { importInput } from "@/server/modules/ledger/contracts";
 import { getLedgerService } from "@/server/modules/ledger";
+import { parseLedgerCsv } from "@/server/modules/ledger/csv";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-/** 批量导入（账单 CSV 解析在前端完成）：按 external_id 去重。 */
+const csvInput = z.object({
+  csv: z.string().min(1).max(512 * 1024),
+  account_id: z.number().int().positive(),
+});
+
 export async function POST(request: Request) {
   return handle(
     async () => {
       assertWritable();
       assertSameOrigin(request);
       await requireAdmin();
-      const input = importInput.parse(await readJson(request));
-      return getLedgerService().importTransactions(input.rows);
+      const input = await readJson(request);
+      if (input && typeof input === "object" && "csv" in input) {
+        const parsed = csvInput.parse(input);
+        return getLedgerService().importTransactions(parseLedgerCsv(parsed.csv, parsed.account_id));
+      }
+      const { rows } = importInput.parse(input);
+      return getLedgerService().importTransactions(rows);
     },
     { request },
   );

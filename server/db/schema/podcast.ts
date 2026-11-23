@@ -12,7 +12,7 @@ export const podcastShow = sqliteTable(
     feedUrl: text("feed_url").notNull(),
     lastCheckedAt: integer("last_checked_at"),
     lastError: text("last_error").notNull().default(""),
-    createdAt: createdAt(),
+    createdAt: createdAt().notNull(),
   },
   (t) => [uniqueIndex("uniq_podcast_feed").on(t.feedUrl)],
 );
@@ -32,7 +32,7 @@ export const podcastEpisode = sqliteTable(
     description: text("description").notNull().default(""),
     played: integer("played").notNull().default(0),
     position: real("position").notNull().default(0),
-    createdAt: createdAt(),
+    createdAt: createdAt().notNull(),
   },
   (t) => [
     uniqueIndex("uniq_podcast_episode").on(t.showId, t.guid),

@@ -17,6 +17,7 @@ export type ColumnKind =
 export interface ColumnMeta {
   name: string;
   kind: ColumnKind;
+  sqlType: string;
   nullable: boolean;
 }
 
@@ -58,6 +59,7 @@ export const TABLES: TableMeta[] = (Object.values(schema) as unknown[])
         return {
           name: column.name,
           kind,
+          sqlType: column.getSQLType(),
           nullable: kind === "id" ? false : !column.notNull,
         };
       }),

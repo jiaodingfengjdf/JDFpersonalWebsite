@@ -56,7 +56,7 @@ db.close();
 
 /* 同步出厂默认值，保证全新部署也指向这个歌单 */
 const siteConfigFile = path.resolve("siteConfig.ts");
-let source = fs.readFileSync(siteConfigFile, "utf8");
+const source = fs.readFileSync(siteConfigFile, "utf8");
 const updated = source.replace(
   /cloudMusicPlaylistId:\s*"[^"]*"/,
   `cloudMusicPlaylistId: "${playlistId}"`,

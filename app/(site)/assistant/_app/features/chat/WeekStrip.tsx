@@ -58,7 +58,7 @@ export default function WeekStrip({
   mode = 'select',
   onMove,
 }: WeekStripProps) {
-  const today = Date.now();
+  const [today] = useState(Date.now);
   const [view, setView] = useState<'week' | 'month'>('week');
   const [weekStart, setWeekStart] = useState(() => mondayOf(today));
   const [monthAnchor, setMonthAnchor] = useState(() => firstOfMonth(today));

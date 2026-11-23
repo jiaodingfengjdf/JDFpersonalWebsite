@@ -36,7 +36,8 @@ export default function MarketManager() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const frame = requestAnimationFrame(() => void load());
+    return () => cancelAnimationFrame(frame);
   }, [load]);
 
   async function add() {
@@ -129,13 +130,13 @@ export default function MarketManager() {
               <p
                 className={`mt-1 text-xl font-semibold ${
                   card.label === "浮动盈亏"
-                    ? card.value >= 0
+                    ? (card.value ?? 0) >= 0
                       ? "text-rose-600"
                       : "text-emerald-600"
                     : ""
                 }`}
               >
-                ¥ {money(card.value)}
+                {card.value === null ? "行情不足" : `¥ ${money(card.value)}`}
               </p>
             </Card>
           ))}

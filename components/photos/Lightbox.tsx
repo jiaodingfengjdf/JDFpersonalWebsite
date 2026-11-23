@@ -4,7 +4,7 @@ import { useEffect, useCallback } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
-import type { Photo } from "@/data/photos";
+import type { Photo } from "@/types/photo";
 import { bypassImageOptimization } from "@/lib/image";
 
 interface LightboxProps {
@@ -116,10 +116,10 @@ export default function Lightbox({
               priority
             />
             {/* caption */}
-            {photo.caption && (
+            {(photo.caption || (photo.width && photo.height) || photo.format) && (
               <div className="absolute -bottom-10 left-0 right-0 text-center">
                 <span className="text-sm text-white/70 font-serif italic">
-                  {photo.caption}
+                  {[photo.caption, photo.width && photo.height ? `${photo.width} × ${photo.height}` : "", photo.format?.toUpperCase()].filter(Boolean).join(" · ")}
                 </span>
               </div>
             )}

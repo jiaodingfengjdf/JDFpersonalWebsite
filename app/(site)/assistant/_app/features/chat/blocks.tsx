@@ -91,14 +91,13 @@ export function ThinkingView({
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    if (!streaming) {
-      setOpen(false);
-      return;
-    }
-    setOpen(true);
+    const frame = requestAnimationFrame(() => setOpen(streaming));
     const started = Date.now();
-    const timer = setInterval(() => setSeconds(Math.round((Date.now() - started) / 1000)), 1000);
-    return () => clearInterval(timer);
+    const timer = streaming ? setInterval(() => setSeconds(Math.round((Date.now() - started) / 1000)), 1000) : undefined;
+    return () => {
+      cancelAnimationFrame(frame);
+      clearInterval(timer);
+    };
   }, [streaming]);
 
   const text = block.thinking.trim();

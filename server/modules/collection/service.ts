@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
 import { bookmarkCategory, collectionItem } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -7,6 +7,7 @@ import type {
   CollectionItem,
   CollectionListResult,
   CollectionQuery,
+  BookmarkImportInput,
 } from "./contracts";
 
 type Row = typeof collectionItem.$inferSelect;
@@ -74,17 +75,6 @@ export function createCollectionService(db: AppDatabase) {
     categoryName: bookmarkCategory.name,
   } as const;
 
-  async function queryRows(where: ReturnType<typeof and> | undefined) {
-    const query = db
-      .select(baseSelect)
-      .from(collectionItem)
-      .leftJoin(bookmarkCategory, eq(bookmarkCategory.id, collectionItem.categoryId));
-
-    return where
-      ? query.where(where).orderBy(asc(collectionItem.sort), desc(collectionItem.id))
-      : query.orderBy(asc(collectionItem.sort), desc(collectionItem.id));
-  }
-
   async function getById(id: number): Promise<CollectionItem> {
     const [row] = await db
       .select(baseSelect)
@@ -97,46 +87,79 @@ export function createCollectionService(db: AppDatabase) {
   }
 
   return {
+    importBookmarks(input: BookmarkImportInput) {
+      const now = new Date();
+      return db.transaction((tx) => {
+        const existing = new Set(tx.select({ url: collectionItem.url }).from(collectionItem)
+          .where(eq(collectionItem.kind, "link")).all().map(({ url }) => {
+            try {
+              return new URL(url).href;
+            } catch {
+              return url;
+            }
+          }));
+        let inserted = 0;
+        for (const item of input.items) {
+          const url = new URL(item.url).href;
+          if (existing.has(url)) continue;
+          tx.insert(collectionItem).values({
+            kind: "link", title: item.title, url, isPublic: 0, createdAt: now, updatedAt: now,
+          }).run();
+          existing.add(url);
+          inserted += 1;
+        }
+        return { inserted, skipped: input.items.length - inserted };
+      }, { behavior: "immediate" });
+    },
+
     async list(
       params: CollectionQuery,
       options: { includePrivate: boolean },
     ): Promise<CollectionListResult> {
-      const conditions = [];
+      const visibility = options.includePrivate ? undefined : eq(collectionItem.isPublic, 1);
+      const conditions = [visibility];
       if (params.kind) conditions.push(eq(collectionItem.kind, params.kind));
       if (params.status) conditions.push(eq(collectionItem.status, params.status));
       if (params.category) conditions.push(eq(collectionItem.categoryId, params.category));
-      if (params.tag) conditions.push(like(collectionItem.tags, `%${params.tag}%`));
+      if (params.tag) {
+        conditions.push(sql`exists (select 1 from json_each(
+          case when json_valid(${collectionItem.tags}) then ${collectionItem.tags} else '[]' end
+        ) where value = ${params.tag})`);
+      }
       if (params.q) {
+        const pattern = `%${params.q.replace(/[!%_]/g, "!$&")}%`;
         conditions.push(
-          or(
-            like(collectionItem.title, `%${params.q}%`),
-            like(collectionItem.note, `%${params.q}%`),
-            like(collectionItem.author, `%${params.q}%`),
-            like(collectionItem.tags, `%${params.q}%`),
-          ),
+          or(...[collectionItem.title, collectionItem.note, collectionItem.author, collectionItem.tags].map(
+            (column) => sql`${column} LIKE ${pattern} ESCAPE '!'`,
+          )),
         );
       }
-      if (!options.includePrivate) conditions.push(eq(collectionItem.isPublic, 1));
-
-      const where = conditions.length > 0 ? and(...conditions) : undefined;
-      const rows = await queryRows(where);
+      const where = and(...conditions);
+      const rows = await db.select(baseSelect)
+        .from(collectionItem)
+        .leftJoin(bookmarkCategory, eq(bookmarkCategory.id, collectionItem.categoryId))
+        .where(where)
+        .orderBy(asc(collectionItem.sort), desc(collectionItem.id))
+        .limit(params.size)
+        .offset((params.page - 1) * params.size);
 
       const [countRows] = await db
         .select({ value: sql<number>`count(*)` })
-        .from(collectionItem);
+        .from(collectionItem)
+        .where(where);
       const total = countRows?.value ?? rows.length;
 
       const counts: Record<string, number> = {};
       for (const row of await db
         .select({ kind: collectionItem.kind, value: sql<number>`count(*)` })
         .from(collectionItem)
+        .where(visibility)
         .groupBy(collectionItem.kind)) {
         counts[row.kind] = row.value;
       }
 
-      const start = (params.page - 1) * params.size;
       return {
-        items: rows.slice(start, start + params.size).map(toItem),
+        items: rows.map(toItem),
         total,
         counts,
       };

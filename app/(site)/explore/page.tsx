@@ -1,14 +1,11 @@
-import type { Metadata } from "next";
-import { loadSiteSettings } from "@/server/modules/site-settings";
-import ExploreClient from "./ExploreClient";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const { profile } = await loadSiteSettings();
-  return { title: `全局搜索 · ${profile.siteTitle}` };
-}
-
-export default function ExplorePage() {
-  return <ExploreClient />;
+export default async function ExplorePage({ searchParams }: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  const { q } = await searchParams;
+  const query = Array.isArray(q) ? q[0] : q;
+  redirect(query ? `/search?q=${encodeURIComponent(query.slice(0, 100))}` : "/search");
 }

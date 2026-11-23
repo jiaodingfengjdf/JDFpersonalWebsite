@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type { WatchItemView } from "@/server/modules/watch/contracts";
 
 const STATUS: Array<{ value: string; label: string }> = [
@@ -51,7 +50,8 @@ export default function WatchManager() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const frame = requestAnimationFrame(() => void load());
+    return () => cancelAnimationFrame(frame);
   }, [load]);
 
   async function add() {

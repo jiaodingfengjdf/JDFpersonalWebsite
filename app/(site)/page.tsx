@@ -1,4 +1,5 @@
 import { getSiteStatsService } from "@/server/modules/site-stats";
+import WelcomeScreen from "@/components/layout/WelcomeScreen";
 import HomeClient from "./HomeClient";
 
 export const revalidate = 60;
@@ -16,10 +17,13 @@ export default async function Home() {
   const { postCount, chatterCount, photoCount } = await fetchProfileData();
 
   return (
-    <HomeClient
-      postCount={postCount}
-      chatterCount={chatterCount}
-      photoCount={photoCount}
-    />
+    <>
+      {process.env.WELCOME_DISABLED === "1" ? null : <WelcomeScreen />}
+      <HomeClient
+        postCount={postCount}
+        chatterCount={chatterCount}
+        photoCount={photoCount}
+      />
+    </>
   );
 }

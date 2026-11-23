@@ -89,7 +89,7 @@ export default function AgentPanel(props: AgentPanelProps): React.ReactElement |
         <div className="agent-body">
           {tab === 'memories' ? (
             <>
-              <form
+              <form noValidate
                 className="agent-add"
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -144,7 +144,7 @@ export default function AgentPanel(props: AgentPanelProps): React.ReactElement |
             </>
           ) : (
             <>
-              <form
+              <form noValidate
                 className="agent-add agent-add-note"
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -163,7 +163,7 @@ export default function AgentPanel(props: AgentPanelProps): React.ReactElement |
                   aria-label="笔记标题"
                 />
                 <textarea
-                  className="agent-input agent-textarea"
+                  className="agent-input agent-textarea resize-none"
                   rows={3}
                   value={noteText}
                   onChange={(event) => setNoteText(event.target.value)}

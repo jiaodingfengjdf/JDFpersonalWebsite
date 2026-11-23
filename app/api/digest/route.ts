@@ -5,5 +5,7 @@ export const dynamic = "force-dynamic";
 
 /** 每日简报：新闻、行情、NBA、收藏、账本（仅管理员登录时）。 */
 export async function GET(request: Request) {
-  return handle(() => buildDigest(), { request });
+  return handle(async () => Response.json(await buildDigest(), {
+    headers: { "cache-control": "private, no-store" },
+  }), { request });
 }

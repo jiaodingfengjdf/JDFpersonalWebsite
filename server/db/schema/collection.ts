@@ -27,8 +27,8 @@ export const collectionItem = sqliteTable(
     meta: text("meta").notNull().default("{}"),
     isPublic: integer("is_public").notNull().default(1),
     sort: integer("sort").notNull().default(0),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [
     index("idx_collection_kind").on(t.kind, t.sort),

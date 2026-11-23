@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, like, lt, or, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
 import { ledgerAccount, ledgerBudget, ledgerCategory, ledgerTxn } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
+import { ledgerDate, parseLedgerDate } from "@/lib/ledger-date";
 import type {
   LedgerAccount,
   LedgerCategory,
@@ -12,18 +13,17 @@ import type {
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
-/** "2026-11" → [start, end) 毫秒时间戳（本地时区自然月） */
+/** [start, end) 按 Asia/Shanghai 划分自然月。 */
 export function monthRange(month: string): { start: number; end: number } {
   const [year, mon] = month.split("-").map(Number);
   return {
-    start: new Date(year, mon - 1, 1).getTime(),
-    end: new Date(year, mon, 1).getTime(),
+    start: parseLedgerDate(`${month}-01`),
+    end: Date.UTC(year, mon, 1) - 8 * 60 * 60 * 1000,
   };
 }
 
 export function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return ledgerDate().slice(0, 7);
 }
 
 function parseTags(value: string | null): string[] {
@@ -249,9 +249,15 @@ export function createLedgerService(db: AppDatabase) {
       if (rows.length === 0) return { inserted: 0, skipped: 0 };
       const now = new Date();
       let inserted = 0;
-      await db.transaction(async (tx) => {
+      db.transaction((tx) => {
+        const accounts = new Set(tx.select({ id: ledgerAccount.id }).from(ledgerAccount).all().map(({ id }) => id));
+        const categories = new Map(tx.select({ id: ledgerCategory.id, kind: ledgerCategory.kind }).from(ledgerCategory).all().map(({ id, kind }) => [id, kind]));
         for (const input of rows) {
-          const result = await tx
+          if (!accounts.has(input.account_id)) throw errors.validation("导入账户不存在");
+          if (input.category_id !== null && categories.get(input.category_id) !== input.kind) {
+            throw errors.validation("导入分类不存在或与收支类型不匹配");
+          }
+          const result = tx
             .insert(ledgerTxn)
             .values({
               accountId: input.account_id,
@@ -266,9 +272,9 @@ export function createLedgerService(db: AppDatabase) {
               createdAt: now,
               updatedAt: now,
             })
-            .onConflictDoNothing()
-            .returning({ id: ledgerTxn.id });
-          if (result.length > 0) inserted += 1;
+            .onConflictDoNothing({ target: ledgerTxn.externalId })
+            .run();
+          inserted += result.changes;
         }
       });
       return { inserted, skipped: rows.length - inserted };
@@ -330,8 +336,7 @@ export function createLedgerService(db: AppDatabase) {
         current.total += row.amount;
         byCategory.set(key, current);
 
-        const date = new Date(row.occurredAt);
-        const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+        const day = ledgerDate(row.occurredAt);
         const bucket = daily.get(day) ?? { income: 0, expense: 0 };
         bucket[kind] += row.amount;
         daily.set(day, bucket);

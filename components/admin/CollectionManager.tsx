@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ExternalLink, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { ExternalLink, Pencil, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import AdminEmptyState from "./AdminEmptyState";
 import AdminError from "./AdminError";
 import AdminPageHeader from "./AdminPageHeader";
@@ -42,6 +42,8 @@ const STATUS_OPTIONS: Array<{ value: CollectionStatus; label: string }> = [
   { value: "done", label: "已完成" },
   { value: "dropped", label: "搁置" },
 ];
+
+const PAGE_SIZE = 30;
 
 interface FormState {
   kind: CollectionKind;
@@ -99,22 +101,56 @@ export default function CollectionManager() {
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const keywordInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const { data, loading, error: loadError, reload } = useAdminData<CollectionPayload>(
-    "/api/admin/collection?size=200",
+    `/api/admin/collection?size=${PAGE_SIZE}&page=${page}&q=${encodeURIComponent(query)}`,
   );
 
-  const items = useMemo(() => {
-    const all = data?.items ?? [];
-    const search = keyword.trim().toLowerCase();
-    if (!search) return all;
-    return all.filter((item) =>
-      [item.title, item.author, item.note, item.tags.join(" ")]
-        .join(" ")
-        .toLowerCase()
-        .includes(search),
-    );
-  }, [data, keyword]);
+  const items = data?.items ?? [];
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+
+  async function importBookmarks(file: File) {
+    setImportResult(null);
+    setActionError(null);
+    setImporting(true);
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error("书签文件不能超过 2 MB。");
+      const template = document.createElement("template");
+      template.innerHTML = await file.text();
+      const items = [];
+      let ignored = 0;
+      for (const link of template.content.querySelectorAll("a[href]")) {
+        const href = link.getAttribute("href") ?? "";
+        const url = URL.canParse(href) ? new URL(href) : null;
+        if (!url || !["http:", "https:"].includes(url.protocol) || url.username || url.password || url.href.length > 1000) {
+          ignored += 1;
+          continue;
+        }
+        items.push({ title: (link.textContent?.trim() || url.hostname).slice(0, 200), url: url.href });
+        if (items.length > 1000) throw new Error("每次最多导入 1000 条书签。");
+      }
+      if (!items.length) throw new Error("文件里没有可导入的网页书签。");
+      const result = await adminRequest<{ inserted: number; skipped: number }>("/api/admin/collection/import", {
+        method: "POST",
+        body: JSON.stringify({ items }),
+      });
+      setKeyword("");
+      setQuery("");
+      setPage(1);
+      setImportResult(`新增 ${result.inserted} 条私密书签，跳过 ${result.skipped} 条重复书签与 ${ignored} 条无效链接。`);
+      reload();
+    } catch (reason) {
+      setActionError(describeAdminError(reason));
+    } finally {
+      setImporting(false);
+    }
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -177,6 +213,7 @@ export default function CollectionManager() {
     setActionError(null);
     try {
       await adminRequest(`/api/admin/collection/${item.id}`, { method: "DELETE" });
+      if (items.length === 1 && page > 1) setPage(page - 1);
       await reload();
     } catch (error) {
       setActionError(describeAdminError(error));
@@ -190,11 +227,20 @@ export default function CollectionManager() {
         title="收藏"
         description="站点、影视、音乐、书、好物与灵感的统一收藏；前台「收藏中心」按类型展示。"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => reload()}>
               <RefreshCw className="mr-1 h-4 w-4" />
               刷新
             </Button>
+            <Button variant="outline" size="sm" disabled={importing} onClick={() => fileInput.current?.click()}>
+              <Upload className="mr-1 h-4 w-4" />
+              {importing ? "正在导入…" : "导入书签 HTML"}
+            </Button>
+            <input ref={fileInput} type="file" accept=".html,.htm,text/html" className="hidden" onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void importBookmarks(file);
+              event.target.value = "";
+            }} />
             <Button size="sm" onClick={openCreate}>
               <Plus className="mr-1 h-4 w-4" />
               新建收藏
@@ -204,6 +250,7 @@ export default function CollectionManager() {
       />
 
       {actionError && <AdminError message={actionError} />}
+      {importResult && <p role="status" className="text-sm text-muted-foreground">{importResult}</p>}
 
       {formOpen && (
         <Card>
@@ -387,27 +434,34 @@ export default function CollectionManager() {
         </Card>
       )}
 
-      <div className="flex items-center gap-3">
+      <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => {
+        event.preventDefault();
+        setQuery(keyword.trim());
+        setPage(1);
+      }}>
         <Input
+          ref={keywordInput}
+          aria-label="搜索收藏"
           value={keyword}
+          maxLength={100}
           onChange={(event) => setKeyword(event.target.value)}
           placeholder="搜索标题 / 标签 / 备注"
           className="max-w-xs"
         />
-        <span className="text-sm text-muted-foreground">
-          共 {data?.total ?? 0} 条
-          {data?.counts
-            ? ` · ${Object.entries(data.counts)
-                .map(([kind, count]) => `${KIND_OPTIONS.find((o) => o.value === kind)?.label ?? kind} ${count}`)
-                .join(" / ")}`
-            : ""}
-        </span>
-      </div>
+        {keyword && <Button type="button" size="sm" variant="ghost" aria-label="清除搜索" onClick={() => {
+          setKeyword("");
+          setQuery("");
+          setPage(1);
+          keywordInput.current?.focus();
+        }}><X className="size-4" /></Button>}
+        <Button type="submit" variant="outline" size="sm">搜索</Button>
+        {data && <span role="status" className="text-sm text-muted-foreground">共 {data.total} 条</span>}
+      </form>
 
       {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
       {loadError && <AdminError message={loadError} />}
       {!loading && !loadError && items.length === 0 && (
-        <AdminEmptyState title="还没有收藏" description="点右上角「新建收藏」添加第一条。" />
+        <AdminEmptyState title={query ? "没有匹配的收藏" : "还没有收藏"} description={query ? "试试其它关键词，或清除搜索。" : "新建一条收藏，或导入浏览器导出的书签 HTML。"} />
       )}
 
       <div className="space-y-2">
@@ -422,11 +476,12 @@ export default function CollectionManager() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate font-medium">{item.title}</span>
-                {item.url && (
+                {/^https?:\/\//i.test(item.url) && (
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={`打开${item.title}`}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
@@ -452,16 +507,23 @@ export default function CollectionManager() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
+              <Button variant="ghost" size="sm" aria-label={`编辑${item.title}`} onClick={() => openEdit(item)}>
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => remove(item)}>
+              <Button variant="ghost" size="sm" aria-label={`删除${item.title}`} onClick={() => remove(item)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           </Card>
         ))}
       </div>
+      {data && (pages > 1 || page > 1) && (
+        <nav aria-label="收藏分页" className="flex items-center justify-center gap-4">
+          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</Button>
+          <span className="text-sm text-muted-foreground">第 {page} / {pages} 页</span>
+          <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>下一页</Button>
+        </nav>
+      )}
     </div>
   );
 }

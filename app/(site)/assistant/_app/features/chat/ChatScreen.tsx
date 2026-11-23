@@ -53,8 +53,11 @@ export default function ChatScreen() {
   useEffect(() => {
     // 切换会话时直接跳到底部
     stickyRef.current = true;
-    setAtBottom(true);
-    requestAnimationFrame(() => scrollToBottom());
+    const frame = requestAnimationFrame(() => {
+      setAtBottom(true);
+      scrollToBottom();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [conversation?.id, scrollToBottom]);
 
   const onScroll = () => {

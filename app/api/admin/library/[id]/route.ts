@@ -5,6 +5,8 @@ import { assertSameOrigin } from "@/server/http/origin";
 import { assertWritable } from "@/server/http/write-guard";
 import { bookInput } from "@/server/modules/library/contracts";
 import { getLibraryService } from "@/server/modules/library";
+import { getUploadRoot } from "@/server/storage";
+import { removeBookUpload } from "@/server/storage/books";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +44,12 @@ export async function DELETE(
       assertSameOrigin(request);
       await requireAdmin();
       const id = Number((await params).id);
-      return getLibraryService().remove(id);
+      const service = getLibraryService();
+      const book = await service.get(id);
+      const result = await service.remove(id);
+      await removeBookUpload(getUploadRoot(), book.file_url)
+        .catch((error) => console.error("Failed to remove book upload", error));
+      return result;
     },
     { request },
   );

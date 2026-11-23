@@ -296,7 +296,7 @@ export default function SettingsScreen() {
           </Row>
           <Row label="额外指令" stacked hint="每次对话都会追加在系统提示词末尾">
             <textarea
-              className="text-input"
+              className="text-input resize-none"
               rows={3}
               value={settings.systemPrompt}
               onChange={(e) => set('systemPrompt', e.target.value)}
@@ -360,7 +360,7 @@ export default function SettingsScreen() {
           <div className="skill-form">
             <input className="text-input" placeholder="技能名，例如 投研速读" value={skillName} onChange={(e) => setSkillName(e.target.value)} />
             <input className="text-input" placeholder="何时用：用户贴出长文要我速读时" value={skillWhen} onChange={(e) => setSkillWhen(e.target.value)} />
-            <textarea className="text-input" rows={3} placeholder="具体步骤：1) … 2) …" value={skillSteps} onChange={(e) => setSkillSteps(e.target.value)} />
+            <textarea className="text-input resize-none" rows={3} placeholder="具体步骤：1) … 2) …" value={skillSteps} onChange={(e) => setSkillSteps(e.target.value)} />
             <button
               type="button"
               className="secondary-btn"

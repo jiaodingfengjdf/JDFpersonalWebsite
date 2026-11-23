@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, RefreshCw, Star } from "lucide-react";
 import type { FeedCategory, FeedItemView } from "@/server/modules/feed/contracts";
 
@@ -27,40 +27,62 @@ export default function NewsClient({ canManage }: { canManage: boolean }) {
   const [items, setItems] = useState<FeedItemView[]>([]);
   const [tab, setTab] = useState<FeedCategory | "all">("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [starredOnly, setStarredOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<number | null>(null);
+  const request = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ limit: "80" });
       if (tab !== "all") params.set("category", tab);
       if (unreadOnly) params.set("unread", "true");
-      const response = await fetch(`/api/news?${params.toString()}`);
+      if (starredOnly) params.set("starred", "true");
+      const response = await fetch(`/api/news?${params.toString()}`, { signal: controller.signal });
+      if (!response.ok) throw new Error("News request failed");
       const json = await response.json();
-      setItems(json.items ?? []);
+      if (!controller.signal.aborted) setItems(json.items ?? []);
     } catch {
-      setError("加载失败，稍后再试");
+      if (!controller.signal.aborted) setError("新闻暂时无法加载，请刷新重试。");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }, [tab, unreadOnly]);
+  }, [tab, unreadOnly, starredOnly]);
 
   useEffect(() => {
-    void load();
+    const frame = requestAnimationFrame(() => void load());
+    return () => {
+      cancelAnimationFrame(frame);
+      request.current?.abort();
+    };
   }, [load]);
 
   async function patch(id: number, body: { read?: boolean; starred?: boolean }) {
-    await fetch(`/api/admin/news/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...body } : item)));
+    if (updating !== null) return;
+    setUpdating(id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/news/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("News update failed");
+      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...body } : item)));
+    } catch {
+      setError("保存新闻状态失败，请重试。");
+    } finally {
+      setUpdating(null);
+    }
   }
 
-  const visible = useMemo(() => items, [items]);
+  const visible = items.filter((item) => (!unreadOnly || !item.read) && (!starredOnly || item.starred));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 relative z-10 sm:px-6 lg:px-8">
@@ -72,14 +94,18 @@ export default function NewsClient({ canManage }: { canManage: boolean }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+          {canManage && <label className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
             <input
               type="checkbox"
               checked={unreadOnly}
               onChange={(event) => setUnreadOnly(event.target.checked)}
             />
             只看未读
-          </label>
+          </label>}
+          {canManage && <label className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            只看星标
+          </label>}
           <button
             type="button"
             onClick={() => void load()}
@@ -108,19 +134,19 @@ export default function NewsClient({ canManage }: { canManage: boolean }) {
         ))}
       </div>
 
-      {error && <p className="mb-3 text-sm text-rose-500">{error}</p>}
+      {error && <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
 
       <div className="divide-y divide-white/30 overflow-hidden rounded-2xl border border-white/40 bg-white/45 backdrop-blur-md dark:divide-white/10 dark:border-white/10 dark:bg-slate-800/45">
-        {loading && <p className="px-4 py-6 text-sm text-slate-500">加载中…</p>}
-        {!loading && visible.length === 0 && (
+        {loading && <p role="status" className="px-4 py-6 text-sm text-slate-500">加载中…</p>}
+        {!loading && !error && visible.length === 0 && (
           <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            还没有条目。{canManage ? "去后台「新闻」点一次抓取。" : "稍后再来看看。"}
+            {unreadOnly || starredOnly ? "没有符合筛选条件的新闻。" : canManage ? "还没有条目。可在后台「新闻」抓取订阅。" : "还没有新闻。"}
           </p>
         )}
-        {visible.map((item) => (
+        {!loading && visible.map((item) => (
           <article key={item.id} className="flex gap-3 px-4 py-3">
             <div className="min-w-0 flex-1">
-              <a
+              {/^https?:\/\//i.test(item.link) ? <a
                 href={item.link}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -133,7 +159,7 @@ export default function NewsClient({ canManage }: { canManage: boolean }) {
               >
                 {item.title}
                 <ExternalLink className="h-3 w-3 opacity-50" />
-              </a>
+              </a> : <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{item.title}</span>}
               {item.summary && (
                 <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   {item.summary}
@@ -147,6 +173,9 @@ export default function NewsClient({ canManage }: { canManage: boolean }) {
             {canManage && (
               <button
                 type="button"
+                disabled={updating !== null}
+                aria-label={item.starred ? "取消星标" : "添加星标"}
+                aria-pressed={item.starred}
                 onClick={() => void patch(item.id, { starred: !item.starred })}
                 className={`shrink-0 self-start rounded-full p-1.5 ${
                   item.starred ? "text-amber-500" : "text-slate-300 hover:text-amber-400"

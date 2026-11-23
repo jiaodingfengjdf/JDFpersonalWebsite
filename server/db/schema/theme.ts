@@ -25,8 +25,8 @@ export const themePreset = sqliteTable(
     cover: text("cover").notNull().default(""),
     isActive: integer("is_active").notNull().default(0),
     sort: integer("sort").notNull().default(0),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [index("idx_theme_preset_sort").on(t.sort, t.id)],
 );

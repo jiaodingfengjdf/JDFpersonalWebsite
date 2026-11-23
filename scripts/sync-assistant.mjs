@@ -22,7 +22,7 @@
  *   --check     同步完成后执行 npx tsc --noEmit
  */
 
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";

@@ -53,14 +53,10 @@ describe("SQLite baseline", () => {
         expect(actual, `${table.name}.${expected.name} exists`).toBeDefined();
         if (!actual) continue;
 
-        const expectedType =
-          expected.kind === "text" || expected.kind === "json"
-            ? "TEXT"
-            : "INTEGER";
         expect(
           actual.type.toUpperCase(),
           `${table.name}.${expected.name} type`,
-        ).toBe(expectedType);
+        ).toBe(expected.sqlType.toUpperCase());
 
         if (expected.kind !== "id") {
           expect(
@@ -79,18 +75,9 @@ describe("SQLite baseline", () => {
     const migrations = database
       .prepare('SELECT "filename" FROM "__migrations"')
       .all() as Array<{ filename: string }>;
-    expect(migrations.map((row) => row.filename)).toEqual([
-      "0000_initial.sql",
-      "0001_seed_projects.sql",
-      "0002_admin_audit_indexes.sql",
-      "0003_notifications.sql",
-      "0004_post_search.sql",
-      "0005_like_record.sql",
-      "0006_photo_metadata.sql",
-      "0007_post_views.sql",
-      "0008_post_history_lifecycle.sql",
-      "0009_imagebed_settings.sql",
-    ]);
+    const migrationFiles = fs.readdirSync(path.join(process.cwd(), "server/db/migrations"))
+      .filter((name) => name.endsWith(".sql")).sort();
+    expect(migrations.map((row) => row.filename).sort()).toEqual(migrationFiles);
 
     const integrity = database.pragma("integrity_check") as Array<{
       integrity_check: string;

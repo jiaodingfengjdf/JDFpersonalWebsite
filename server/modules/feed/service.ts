@@ -135,7 +135,7 @@ export function createFeedService(db: AppDatabase) {
       starred?: boolean;
       limit: number;
     }): Promise<FeedItemView[]> {
-      const conditions = [];
+      const conditions = [eq(feedSource.enabled, 1)];
       if (params.category) conditions.push(eq(feedSource.category, params.category));
       if (params.unread) conditions.push(eq(feedItem.read, 0));
       if (params.starred) conditions.push(eq(feedItem.starred, 1));
@@ -156,7 +156,7 @@ export function createFeedService(db: AppDatabase) {
         })
         .from(feedItem)
         .innerJoin(feedSource, eq(feedSource.id, feedItem.sourceId))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .where(and(...conditions))
         .orderBy(desc(feedItem.publishedAt), desc(feedItem.id))
         .limit(params.limit);
 

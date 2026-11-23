@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:clean": "rm -rf .next/dev && next dev",
+    "dev:clean": "node -e \"require('node:fs').rmSync('.next/dev', { recursive: true, force: true })\" && next dev",
     "dev:webpack": "next dev --webpack",
     "build": "next build",
     "start": "next start",
@@ -91,6 +91,7 @@
     "eslint-config-next": "16.5.0-canary.39",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite": "^6.4.6",
     "vitest": "^5.0.5"
   }
 }

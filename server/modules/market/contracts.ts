@@ -40,8 +40,14 @@ export interface MarketQuoteItem {
 
 export interface MarketOverview {
   items: MarketQuoteItem[];
-  total_value: number;
+  total_value: number | null;
   total_cost: number;
-  total_profit: number;
+  total_profit: number | null;
+  unpriced_holdings: number;
   fetched_at: string;
+}
+
+export interface MarketHistoryPoint {
+  price: number;
+  captured_at: number;
 }

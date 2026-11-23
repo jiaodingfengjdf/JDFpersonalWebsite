@@ -15,8 +15,8 @@ export const marketWatch = sqliteTable(
     /** 持有份额/股数（可空） */
     shares: real("shares"),
     sort: integer("sort").notNull().default(0),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
+    createdAt: createdAt().notNull(),
+    updatedAt: updatedAt().notNull(),
   },
   (t) => [uniqueIndex("uniq_market_watch").on(t.kind, t.code), index("idx_market_watch_sort").on(t.sort)],
 );
