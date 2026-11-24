@@ -1,15 +1,53 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
-import { marketSnapshot, marketWatch } from "@/server/db/schema";
+import { marketAlert, marketSnapshot, marketWatch } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
-import type { MarketHistoryPoint, MarketOverview, MarketQuoteItem, WatchInput } from "./contracts";
+import type {
+  AlertInput,
+  MarketAlertItem,
+  MarketCurrencyTotals,
+  MarketHistory,
+  MarketIndexItem,
+  MarketOverview,
+  MarketPeriod,
+  MarketQuoteItem,
+  WatchInput,
+} from "./contracts";
 import { getQuotes, symbolOf, type MarketKind } from "./provider";
+import {
+  cnSecid,
+  dailyKline,
+  fundNav,
+  GLOBAL_INDICES,
+  intradayTrends,
+  quotesBySecids,
+  resolveUsSecid,
+} from "./eastmoney";
+import { aggregateCandles, aggregateNav, SERIES_LIMIT, takeLast, toCandle } from "./series";
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const SNAPSHOT_GAP_MS = 10 * 60 * 1000;
 const dateTime = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
 });
+
+type WatchRow = typeof marketWatch.$inferSelect;
+
+interface LiveQuote {
+  price: number;
+  change: number;
+  changePct: number;
+  time: string;
+  stale: boolean;
+  name?: string;
+}
+
+/** 存量记录的 secid 为空，按代码推导；美股必须有 secid 才能取数。 */
+function watchSecid(watch: WatchRow): string {
+  if (watch.secid) return watch.secid;
+  if (watch.market === "us") return "";
+  return cnSecid(watch.kind, watch.code);
+}
 
 export function createMarketService(db: AppDatabase) {
   async function listWatches() {
@@ -19,93 +57,317 @@ export function createMarketService(db: AppDatabase) {
   const watchSnapshots = (watch: { kind: string; code: string }) =>
     and(eq(marketSnapshot.kind, watch.kind), eq(marketSnapshot.code, watch.code));
 
+  function lastSnapshot(watch: WatchRow) {
+    return db
+      .select({
+        price: marketSnapshot.price,
+        changePct: marketSnapshot.changePct,
+        capturedAt: marketSnapshot.capturedAt,
+      })
+      .from(marketSnapshot)
+      .where(watchSnapshots(watch))
+      .orderBy(desc(marketSnapshot.capturedAt))
+      .limit(1)
+      .get();
+  }
+
+  function buildItem(watch: WatchRow, live: LiveQuote | undefined, record: boolean): MarketQuoteItem {
+    const snapshot = !live || live.price <= 0 ? lastSnapshot(watch) : undefined;
+    const now = Date.now();
+
+    if (live && live.price > 0 && !live.stale && record) {
+      const previous = lastSnapshot(watch);
+      if (!previous || now - previous.capturedAt >= SNAPSHOT_GAP_MS) {
+        db.insert(marketSnapshot)
+          .values({
+            kind: watch.kind,
+            code: watch.code,
+            price: live.price,
+            changePct: live.changePct,
+            capturedAt: now,
+          })
+          .run();
+      }
+    }
+
+    const price = live?.price ?? snapshot?.price ?? 0;
+    const changePct = live?.price ? live.changePct : (snapshot?.changePct ?? 0);
+    const cost = watch.cost ?? null;
+    const shares = watch.shares ?? null;
+    const hasHolding = cost !== null && shares !== null && shares > 0;
+    const currency = watch.market === "us" ? "USD" : "CNY";
+
+    return {
+      id: watch.id,
+      kind: watch.kind as MarketQuoteItem["kind"],
+      market: watch.market === "us" ? "us" : "cn",
+      code: watch.code,
+      name: live?.name || watch.name || watch.code,
+      price,
+      change: live?.price ? live.change : 0,
+      change_pct: price > 0 ? changePct : 0,
+      time: live?.time || (snapshot ? dateTime.format(snapshot.capturedAt) : ""),
+      stale: live ? live.stale : true,
+      currency,
+      cost,
+      shares,
+      market_value: hasHolding && price > 0 ? round2(price * shares) : null,
+      profit: hasHolding && price > 0 ? round2((price - cost) * shares) : null,
+      profit_pct: hasHolding && price > 0 && cost > 0 ? round2(((price - cost) / cost) * 100) : null,
+    };
+  }
+
+  /** 美股走搜索接口校验代码并补全名称；A 股直接按规则推导 secid。 */
+  async function resolveIdentity(
+    input: WatchInput,
+  ): Promise<{ market: "cn" | "us"; kind: "stock" | "index" | "fund"; secid: string; name: string }> {
+    if (input.market === "us") {
+      const hit = await resolveUsSecid(input.code);
+      if (!hit) {
+        throw errors.badRequest(`没有找到美股标的「${input.code}」，请填交易所代码，例如 AAPL / SPX`);
+      }
+      return { market: "us", kind: hit.kind, secid: hit.secid, name: hit.name };
+    }
+    return {
+      market: "cn",
+      kind: input.kind,
+      secid: cnSecid(input.kind, input.code),
+      name: input.name,
+    };
+  }
+
   return {
     watches: listWatches,
 
     async quotes(options: { record?: boolean } = {}): Promise<MarketQuoteItem[]> {
       const watches = await listWatches();
-      const quotes = await getQuotes(
-        watches.map((item) => ({ kind: item.kind as MarketKind, code: item.code })),
-      );
+      if (watches.length === 0) return [];
 
-      const now = Date.now();
-      const mapQuotes = () => watches.map((watch): MarketQuoteItem => {
-        const hit = quotes.get(symbolOf(watch.kind as MarketKind, watch.code));
-        const snapshot = !hit || (options.record && !hit.stale)
-          ? db.select().from(marketSnapshot).where(watchSnapshots(watch))
-              .orderBy(desc(marketSnapshot.capturedAt)).limit(1).get()
-          : undefined;
-        if (hit && !hit.stale && options.record && (!snapshot || now - snapshot.capturedAt >= SNAPSHOT_GAP_MS)) {
-          db.insert(marketSnapshot).values({
-            kind: watch.kind, code: watch.code, price: hit.quote.price, changePct: hit.quote.changePct, capturedAt: now,
-          }).run();
-        }
-        const price = hit?.quote.price ?? snapshot?.price ?? 0;
-        const changePct = hit?.quote.changePct ?? snapshot?.changePct ?? 0;
-        const cost = watch.cost ?? null;
-        const shares = watch.shares ?? null;
-        const hasHolding = cost !== null && shares !== null && shares > 0;
+      const cnWatches = watches.filter((watch) => watch.market !== "us");
+      const usWatches = watches.filter((watch) => watch.market === "us");
+      const usSecids = usWatches.map(watchSecid).filter((secid) => secid.length > 0);
 
-        return {
-          id: watch.id,
-          kind: watch.kind as MarketQuoteItem["kind"],
-          code: watch.code,
-          name: hit?.quote.name || watch.name || watch.code,
-          price,
-          change: hit?.quote.change ?? (price > 0 && changePct > -100 ? price * changePct / (100 + changePct) : 0),
-          change_pct: changePct,
-          time: hit?.quote.time ?? (snapshot ? dateTime.format(snapshot.capturedAt) : ""),
-          stale: hit?.stale ?? true,
-          cost,
-          shares,
-          market_value: hasHolding && price > 0 ? round2(price * shares) : null,
-          profit: hasHolding && price > 0 ? round2((price - cost) * shares) : null,
-          profit_pct: hasHolding && price > 0 && cost > 0 ? round2(((price - cost) / cost) * 100) : null,
-        };
-      });
+      const [cnQuotes, usResult] = await Promise.all([
+        getQuotes(cnWatches.map((watch) => ({ kind: watch.kind as MarketKind, code: watch.code }))),
+        quotesBySecids(usSecids),
+      ]);
 
-      return options.record ? db.transaction(mapQuotes, { behavior: "immediate" }) : mapQuotes();
+      const record = options.record === true;
+      const build = () =>
+        watches.map((watch): MarketQuoteItem => {
+          if (watch.market === "us") {
+            const hit = usResult.quotes.get(watchSecid(watch));
+            return buildItem(
+              watch,
+              hit
+                ? {
+                    price: hit.price,
+                    change: hit.change,
+                    changePct: hit.changePct,
+                    time: hit.updatedAt ? dateTime.format(hit.updatedAt) : "",
+                    stale: usResult.stale,
+                    name: hit.name,
+                  }
+                : undefined,
+              record,
+            );
+          }
+
+          const hit = cnQuotes.get(symbolOf(watch.kind as MarketKind, watch.code));
+          return buildItem(
+            watch,
+            hit
+              ? {
+                  price: hit.quote.price,
+                  change: hit.quote.change,
+                  changePct: hit.quote.changePct,
+                  time: hit.quote.time,
+                  stale: hit.stale,
+                  name: hit.quote.name,
+                }
+              : undefined,
+            record,
+          );
+        });
+
+      return record ? db.transaction(build, { behavior: "immediate" }) : build();
     },
 
     async overview(): Promise<MarketOverview> {
       const items = await this.quotes({ record: true });
-      const now = Date.now();
-      const held = items.filter((item) => item.cost !== null && (item.shares ?? 0) > 0);
-      const unpricedHoldings = held.filter((item) => item.market_value === null).length;
-      const totalValue = round2(held.reduce((sum, item) => sum + (item.market_value ?? 0), 0));
-      const totalCost = round2(
-        held.reduce((sum, item) => sum + (item.cost ?? 0) * (item.shares ?? 0), 0),
-      );
+      const totals: MarketCurrencyTotals[] = (["CNY", "USD"] as const)
+        .map((currency) => {
+          const held = items.filter(
+            (item) => item.currency === currency && item.cost !== null && (item.shares ?? 0) > 0,
+          );
+          if (held.length === 0) return null;
+          const unpriced = held.filter((item) => item.market_value === null).length;
+          const value = round2(held.reduce((sum, item) => sum + (item.market_value ?? 0), 0));
+          const cost = round2(
+            held.reduce((sum, item) => sum + (item.cost ?? 0) * (item.shares ?? 0), 0),
+          );
+          return {
+            currency,
+            value: unpriced ? null : value,
+            cost,
+            profit: unpriced ? null : round2(value - cost),
+            unpriced,
+          } satisfies MarketCurrencyTotals;
+        })
+        .filter((item): item is MarketCurrencyTotals => item !== null);
+
+      const cny = totals.find((item) => item.currency === "CNY");
 
       return {
         items,
-        total_value: unpricedHoldings ? null : totalValue,
-        total_cost: totalCost,
-        total_profit: unpricedHoldings ? null : round2(totalValue - totalCost),
-        unpriced_holdings: unpricedHoldings,
-        fetched_at: new Date(now).toISOString(),
+        totals,
+        total_value: cny?.value ?? null,
+        total_cost: cny?.cost ?? 0,
+        total_profit: cny?.profit ?? null,
+        unpriced_holdings: cny?.unpriced ?? 0,
+        fetched_at: new Date().toISOString(),
       };
     },
 
-    async history(id: number): Promise<MarketHistoryPoint[]> {
+    /** 顶部指数条：固定 A 股 + 美股核心指数，一次批量报价。 */
+    async indices(): Promise<MarketIndexItem[]> {
+      const { quotes, stale } = await quotesBySecids(GLOBAL_INDICES.map((item) => item.secid));
+      return GLOBAL_INDICES.map((meta) => {
+        const hit = quotes.get(meta.secid);
+        return {
+          code: meta.code,
+          name: meta.name,
+          market: meta.market,
+          price: hit?.price ?? 0,
+          change: hit?.change ?? 0,
+          change_pct: hit?.changePct ?? 0,
+          stale: !hit || stale,
+        };
+      });
+    },
+
+    async history(id: number, period: MarketPeriod): Promise<MarketHistory> {
       const watch = db.select().from(marketWatch).where(eq(marketWatch.id, id)).get();
       if (!watch) throw errors.notFound("自选标的不存在");
-      const rows = await db.select({ price: marketSnapshot.price, captured_at: marketSnapshot.capturedAt })
-        .from(marketSnapshot)
-        .where(watchSnapshots(watch))
-        .orderBy(desc(marketSnapshot.capturedAt))
-        .limit(120);
-      return rows.reverse();
+
+      const updatedAt = new Date().toISOString();
+      const fallback = (note: string): MarketHistory => {
+        const rows = db
+          .select({ price: marketSnapshot.price, capturedAt: marketSnapshot.capturedAt })
+          .from(marketSnapshot)
+          .where(watchSnapshots(watch))
+          .orderBy(desc(marketSnapshot.capturedAt))
+          .limit(120)
+          .all()
+          .reverse();
+        return {
+          period,
+          series: "line",
+          candles: [],
+          points: rows.map((row) => ({
+            label: dateTime.format(row.capturedAt),
+            value: row.price,
+          })),
+          prev_close: rows.length > 1 ? rows[rows.length - 2].price : null,
+          source: "snapshot",
+          stale: true,
+          note,
+          updated_at: updatedAt,
+        };
+      };
+
+      if (watch.kind === "fund") {
+        if (period === "intraday") {
+          return {
+            period,
+            series: "line",
+            candles: [],
+            points: [],
+            prev_close: null,
+            source: "fund",
+            stale: false,
+            note: "基金按日披露净值，没有分时行情；切到日/周/月查看净值走势。",
+            updated_at: updatedAt,
+          };
+        }
+        const { points, stale } = await fundNav(watch.code);
+        if (points.length > 0) {
+          const series = takeLast(aggregateNav(points, period), SERIES_LIMIT[period]);
+          return {
+            period,
+            series: "line",
+            candles: [],
+            points: series,
+            prev_close: series.length > 1 ? series[series.length - 2].value : null,
+            source: "fund",
+            stale,
+            note: "数据来自基金历史净值（单位净值，按日披露）。",
+            updated_at: updatedAt,
+          };
+        }
+        return fallback("基金净值接口暂时不可用，先展示站内报价快照。");
+      }
+
+      const secid = watchSecid(watch);
+      if (!secid) return fallback("这个标的缺少 secid，无法取历史行情。");
+
+      if (period === "intraday") {
+        const { series, stale } = await intradayTrends(secid, 1);
+        if (series) {
+          return {
+            period,
+            series: "line",
+            candles: [],
+            points: series.points.map((point) => ({
+              label: point.time,
+              value: point.price,
+              avg: point.avg,
+              volume: point.volume,
+            })),
+            prev_close: series.prevClose || null,
+            source: "eastmoney",
+            stale,
+            note: "分时为一分钟粒度，价格为上游最新成交价；时间统一按北京时间（美股为 22:30 至次日 05:00 左右）。",
+            updated_at: updatedAt,
+          };
+        }
+        return fallback("分时接口暂时不可用，先展示站内报价快照。");
+      }
+
+      const { bars, stale } = await dailyKline(secid, 480);
+      if (bars.length > 0) {
+        const candles =
+          period === "day" ? bars.map(toCandle) : aggregateCandles(bars, period);
+        const series = takeLast(candles, SERIES_LIMIT[period]);
+        return {
+          period,
+          series: "candle",
+          candles: series,
+          points: [],
+          prev_close: series.length > 1 ? series[series.length - 2].close : null,
+          source: "eastmoney",
+          stale,
+          note:
+            period === "week" || period === "month"
+              ? "周/月线由日线按自然周/自然月聚合：开=首日开，收=末日收，高/低=区间极值。"
+              : "日线为前复权数据。",
+          updated_at: updatedAt,
+        };
+      }
+      return fallback("K 线接口暂时不可用，先展示站内报价快照。");
     },
 
     async create(input: WatchInput) {
+      const identity = await resolveIdentity(input);
       const now = new Date();
       const [row] = await db
         .insert(marketWatch)
         .values({
-          kind: input.kind,
+          market: identity.market,
+          kind: identity.kind,
           code: input.code,
-          name: input.name,
+          secid: identity.secid,
+          name: input.name || identity.name,
           cost: input.cost,
           shares: input.shares,
           sort: input.sort,
@@ -119,12 +381,17 @@ export function createMarketService(db: AppDatabase) {
     },
 
     async update(id: number, input: WatchInput) {
+      const existing = db.select().from(marketWatch).where(eq(marketWatch.id, id)).get();
+      if (!existing) throw errors.notFound("自选标的不存在");
+      const identity = await resolveIdentity(input);
       await db
         .update(marketWatch)
         .set({
-          kind: input.kind,
+          market: identity.market,
+          kind: identity.kind,
           code: input.code,
-          name: input.name,
+          secid: identity.secid,
+          name: input.name || identity.name || existing.name,
           cost: input.cost,
           shares: input.shares,
           sort: input.sort,
@@ -135,8 +402,94 @@ export function createMarketService(db: AppDatabase) {
     },
 
     async remove(id: number) {
-      await db.delete(marketWatch).where(eq(marketWatch.id, id));
+      db.transaction(() => {
+        db.delete(marketAlert).where(eq(marketAlert.watchId, id)).run();
+        db.delete(marketWatch).where(eq(marketWatch.id, id)).run();
+      }, { behavior: "immediate" });
       return { ok: true };
+    },
+
+    async alerts(): Promise<MarketAlertItem[]> {
+      const rows = await db
+        .select({
+          id: marketAlert.id,
+          watchId: marketAlert.watchId,
+          rule: marketAlert.rule,
+          threshold: marketAlert.threshold,
+          enabled: marketAlert.enabled,
+          lastFiredAt: marketAlert.lastFiredAt,
+          name: marketWatch.name,
+          code: marketWatch.code,
+          kind: marketWatch.kind,
+        })
+        .from(marketAlert)
+        .innerJoin(marketWatch, eq(marketWatch.id, marketAlert.watchId))
+        .orderBy(asc(marketWatch.sort), asc(marketAlert.id));
+
+      return rows.map((row) => ({
+        id: row.id,
+        watch_id: row.watchId,
+        name: row.name || row.code,
+        code: row.code,
+        kind: row.kind as MarketAlertItem["kind"],
+        rule: row.rule as MarketAlertItem["rule"],
+        threshold: row.threshold,
+        enabled: row.enabled === true,
+        last_fired_at: row.lastFiredAt ? row.lastFiredAt.toISOString() : null,
+      }));
+    },
+
+    async createAlert(input: AlertInput) {
+      const watch = db
+        .select({ id: marketWatch.id })
+        .from(marketWatch)
+        .where(eq(marketWatch.id, input.watch_id))
+        .get();
+      if (!watch) throw errors.badRequest("自选标的不存在，先添加标的再加提醒");
+      const now = new Date();
+      const [row] = await db
+        .insert(marketAlert)
+        .values({
+          watchId: input.watch_id,
+          rule: input.rule,
+          threshold: input.threshold,
+          enabled: input.enabled,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: marketAlert.id });
+      return { id: row.id };
+    },
+
+    async updateAlert(
+      id: number,
+      input: { rule: MarketAlertItem["rule"]; threshold: number; enabled: boolean },
+    ) {
+      const existing = db.select().from(marketAlert).where(eq(marketAlert.id, id)).get();
+      if (!existing) throw errors.notFound("提醒规则不存在");
+      await db
+        .update(marketAlert)
+        .set({
+          rule: input.rule,
+          threshold: input.threshold,
+          enabled: input.enabled,
+          updatedAt: new Date(),
+        })
+        .where(eq(marketAlert.id, id));
+      return { ok: true };
+    },
+
+    async removeAlert(id: number) {
+      db.delete(marketAlert).where(eq(marketAlert.id, id)).run();
+      return { ok: true };
+    },
+
+    /** 记录成功推送时间，供单条规则冷却使用。 */
+    markAlertFired(id: number) {
+      db.update(marketAlert)
+        .set({ lastFiredAt: new Date(), updatedAt: new Date() })
+        .where(eq(marketAlert.id, id))
+        .run();
     },
   };
 }

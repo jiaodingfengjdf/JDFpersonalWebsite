@@ -69,6 +69,25 @@ export async function runChecksNow(): Promise<CheckReport> {
   state.ticking = true;
   try {
     const report = await runNotificationChecks(getNotificationsService());
+
+    // 行情采样：不再只靠访问触发，调度器每轮补一次快照（10 分钟粒度去重）。
+    try {
+      const { getMarketService } = await import("../market");
+      await getMarketService().quotes({ record: true });
+    } catch (error) {
+      report.errors.push(`market.sample: ${describeError(error)}`);
+    }
+
+    // 行情提醒和运维巡检共用这一轮调度，失败只记错误，不影响巡检结果。
+    try {
+      const { evaluateMarketAlerts } = await import("../market/alerts");
+      const market = await evaluateMarketAlerts();
+      report.triggered.push(...market.fired);
+      report.errors.push(...market.errors);
+    } catch (error) {
+      report.errors.push(`market.alerts: ${describeError(error)}`);
+    }
+
     state.lastReport = report;
     state.lastRunAt = report.ran_at;
     state.runCount += 1;

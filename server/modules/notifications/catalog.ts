@@ -161,6 +161,15 @@ export const NOTIFICATION_EVENTS: EventSpec[] = [
     ],
   },
   {
+    key: "market.alert",
+    label: "行情涨跌提醒",
+    description:
+      "自选标的命中后台设置的涨跌幅/价格规则时推送。规则在「行情」页维护，单条规则 30 分钟内不会重复提醒。",
+    level: "warning",
+    cooldownSeconds: 600,
+    thresholds: [],
+  },
+  {
     key: "message.created",
     label: "收到新留言",
     description: "有新留言或回复提交时立即发送通知。",

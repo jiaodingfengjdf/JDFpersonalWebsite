@@ -50,3 +50,6 @@ next-env.d.ts
 
 # local image uploads
 /uploads/
+
+# workbuddy agent local state (memory/logs)
+/.workbuddy/
