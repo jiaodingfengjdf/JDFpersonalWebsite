@@ -2,8 +2,75 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
 import { feedItem, feedSource } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
-import type { FeedCategory, FeedItemView, FeedSourceItem, SourceInput } from "./contracts";
+import type {
+  FeedCategory,
+  FeedItemPage,
+  FeedItemView,
+  FeedSourceItem,
+  SourceInput,
+} from "./contracts";
 import { fetchFeed } from "./provider";
+
+type ListParams = {
+  category?: FeedCategory;
+  unread?: boolean;
+  starred?: boolean;
+  limit: number;
+  offset?: number;
+};
+
+type FeedListRow = {
+  id: number;
+  sourceId: number;
+  sourceName: string;
+  category: string;
+  title: string;
+  link: string;
+  summary: string;
+  cover: string;
+  publishedAt: number;
+  read: number;
+  starred: number;
+};
+
+const listColumns = {
+  id: feedItem.id,
+  sourceId: feedItem.sourceId,
+  sourceName: feedSource.name,
+  category: feedSource.category,
+  title: feedItem.title,
+  link: feedItem.link,
+  summary: feedItem.summary,
+  cover: feedItem.cover,
+  publishedAt: feedItem.publishedAt,
+  read: feedItem.read,
+  starred: feedItem.starred,
+};
+
+/** 列表与 COUNT 共用这一套下推条件，避免两处过滤口径漂移。 */
+function listWhere(params: ListParams) {
+  const conditions = [eq(feedSource.enabled, 1)];
+  if (params.category) conditions.push(eq(feedSource.category, params.category));
+  if (params.unread) conditions.push(eq(feedItem.read, 0));
+  if (params.starred) conditions.push(eq(feedItem.starred, 1));
+  return and(...conditions);
+}
+
+function toFeedItemView(row: FeedListRow): FeedItemView {
+  return {
+    id: row.id,
+    source_id: row.sourceId,
+    source_name: row.sourceName,
+    category: row.category as FeedCategory,
+    title: row.title,
+    link: row.link,
+    summary: row.summary,
+    cover: row.cover,
+    published_at: row.publishedAt,
+    read: Boolean(row.read),
+    starred: Boolean(row.starred),
+  };
+}
 
 export function createFeedService(db: AppDatabase) {
   async function listSources(): Promise<FeedSourceItem[]> {
@@ -129,50 +196,41 @@ export function createFeedService(db: AppDatabase) {
       return { fetched, inserted, failed };
     },
 
-    async list(params: {
-      category?: FeedCategory;
-      unread?: boolean;
-      starred?: boolean;
-      limit: number;
-    }): Promise<FeedItemView[]> {
-      const conditions = [eq(feedSource.enabled, 1)];
-      if (params.category) conditions.push(eq(feedSource.category, params.category));
-      if (params.unread) conditions.push(eq(feedItem.read, 0));
-      if (params.starred) conditions.push(eq(feedItem.starred, 1));
-
+    /** 不分页的简版列表，供每日简报等内部聚合使用。 */
+    async list(params: ListParams): Promise<FeedItemView[]> {
       const rows = await db
-        .select({
-          id: feedItem.id,
-          sourceId: feedItem.sourceId,
-          sourceName: feedSource.name,
-          category: feedSource.category,
-          title: feedItem.title,
-          link: feedItem.link,
-          summary: feedItem.summary,
-          cover: feedItem.cover,
-          publishedAt: feedItem.publishedAt,
-          read: feedItem.read,
-          starred: feedItem.starred,
-        })
+        .select(listColumns)
         .from(feedItem)
         .innerJoin(feedSource, eq(feedSource.id, feedItem.sourceId))
-        .where(and(...conditions))
+        .where(listWhere(params))
         .orderBy(desc(feedItem.publishedAt), desc(feedItem.id))
-        .limit(params.limit);
+        .limit(params.limit)
+        .offset(params.offset ?? 0);
 
-      return rows.map((row) => ({
-        id: row.id,
-        source_id: row.sourceId,
-        source_name: row.sourceName,
-        category: row.category as FeedCategory,
-        title: row.title,
-        link: row.link,
-        summary: row.summary,
-        cover: row.cover,
-        published_at: row.publishedAt,
-        read: Boolean(row.read),
-        starred: Boolean(row.starred),
-      }));
+      return rows.map(toFeedItemView);
+    },
+
+    /** 公开分页列表：COUNT 与行查询共用 WHERE，过滤全部下推到 SQL。 */
+    async listPage(params: ListParams): Promise<FeedItemPage> {
+      const where = listWhere(params);
+      const [{ value }] = await db
+        .select({ value: sql<number>`count(*)` })
+        .from(feedItem)
+        .innerJoin(feedSource, eq(feedSource.id, feedItem.sourceId))
+        .where(where);
+
+      const total = Number(value ?? 0);
+      const rows = await db
+        .select(listColumns)
+        .from(feedItem)
+        .innerJoin(feedSource, eq(feedSource.id, feedItem.sourceId))
+        .where(where)
+        .orderBy(desc(feedItem.publishedAt), desc(feedItem.id))
+        .limit(params.limit)
+        .offset(params.offset ?? 0);
+      const items = rows.map(toFeedItemView);
+      const offset = params.offset ?? 0;
+      return { items, total, hasMore: offset + items.length < total };
     },
 
     async patchItem(id: number, patch: { read?: boolean; starred?: boolean }) {

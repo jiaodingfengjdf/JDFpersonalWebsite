@@ -199,6 +199,54 @@ describe("search service", () => {
     }
   });
 
+  it("requires every short token to appear in a LIKE fallback query", async () => {
+    insertPost({
+      title: "AI 笔记",
+      slug: "ai-only",
+      content: "只谈人工智能。",
+    });
+    insertPost({
+      title: "投资心得",
+      slug: "invest-only",
+      content: "只谈理财。",
+    });
+    insertPost({
+      title: "AI 投资指南",
+      slug: "both",
+      content: "两个词都在标题里。",
+    });
+
+    const result = await search.search({ q: "AI 投资", limit: 10 });
+
+    expect(result.fuzzy).toBe(true);
+    expect(result.hits.map((hit) => hit.slug)).toEqual(["both"]);
+    expect(result.total).toBe(1);
+  });
+
+  it("keeps AND semantics for multi-token queries through the FTS path", async () => {
+    insertPost({
+      title: "全文搜索指南",
+      slug: "fts-first-only",
+      content: "这里只谈检索。",
+    });
+    insertPost({
+      title: "索引实现笔记",
+      slug: "fts-second-only",
+      content: "这里只有全文两个字。",
+    });
+    insertPost({
+      title: "全文搜索的索引实现",
+      slug: "fts-both",
+      content: "两个长词都出现。",
+    });
+
+    const result = await search.search({ q: "全文搜索 索引实现", limit: 10 });
+
+    expect(result.fuzzy).toBe(false);
+    expect(result.hits.map((hit) => hit.slug)).toEqual(["fts-both"]);
+    expect(result.total).toBe(1);
+  });
+
   it("returns an empty result for a blank query", async () => {
     const result = await search.search({ q: "   ", limit: 5 });
 

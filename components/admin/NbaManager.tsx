@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import AdminError from "./AdminError";
 import AdminPageHeader from "./AdminPageHeader";
 import { adminRequest, describeAdminError } from "./admin-api";
+import { formatDayTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import type { NbaGameView, NbaTeam } from "@/server/modules/nba/contracts";
@@ -72,7 +73,7 @@ export default function NbaManager() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        eyebrow="生活"
+        eyebrow="兴趣"
         title="NBA"
         description="关注球队、抓取近期赛程与比分；前台 /nba 可切换「全部 / 我关注的队」。"
         actions={
@@ -113,19 +114,18 @@ export default function NbaManager() {
           <CardTitle>近期比赛（{games.length}）</CardTitle>
         </CardHeader>
         <div className="divide-y p-4 pt-0">
-          {loading && <p className="py-3 text-sm text-muted-foreground">加载中…</p>}
+          {loading && (
+            <p className="py-3 text-sm text-slate-500 dark:text-slate-400">加载中…</p>
+          )}
           {!loading && games.length === 0 && (
-            <p className="py-3 text-sm text-muted-foreground">还没有数据，点右上「抓取赛程」。</p>
+            <p className="py-3 text-sm text-slate-500 dark:text-slate-400">
+              还没有数据，点右上「抓取赛程」。
+            </p>
           )}
           {games.map((game) => (
             <div key={game.game_id} className="flex items-center gap-3 py-2 text-sm">
-              <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                {new Date(game.start_at).toLocaleString("zh-CN", {
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+              <span className="w-28 shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                {formatDayTime(game.start_at)}
               </span>
               <span className="flex-1 truncate">
                 {game.away_name} @ {game.home_name}
@@ -133,8 +133,11 @@ export default function NbaManager() {
               </span>
               <span className="w-20 text-right font-medium">
                 {game.status === "scheduled" ? "—" : `${game.away_score}-${game.home_score}`}
+                {game.status === "live" && game.detail ? (
+                  <span className="block text-[10px] font-normal text-rose-500">{game.detail}</span>
+                ) : null}
               </span>
-              <span className="w-16 text-right text-xs text-muted-foreground">
+              <span className="w-16 text-right text-xs text-slate-500 dark:text-slate-400">
                 {game.status === "final" ? "已结束" : game.status === "live" ? "进行中" : "未开始"}
               </span>
             </div>

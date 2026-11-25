@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/page-metadata";
 import { getCollectionService } from "@/server/modules/collection";
 import { collectionQuery } from "@/server/modules/collection/contracts";
 import { loadSiteSettings } from "@/server/modules/site-settings";
@@ -8,10 +9,11 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { profile } = await loadSiteSettings();
-  return {
+  return buildPageMetadata({
     title: `收藏中心 · ${profile.siteTitle}`,
     description: "站点、影视、音乐、书、好物与灵感的统一收藏",
-  };
+    path: "/bookmark",
+  });
 }
 
 export default async function BookmarkPage({ searchParams }: {

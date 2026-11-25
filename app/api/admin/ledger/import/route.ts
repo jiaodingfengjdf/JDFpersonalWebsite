@@ -24,7 +24,14 @@ export async function POST(request: Request) {
       const input = await readJson(request);
       if (input && typeof input === "object" && "csv" in input) {
         const parsed = csvInput.parse(input);
-        return getLedgerService().importTransactions(parseLedgerCsv(parsed.csv, parsed.account_id));
+        const service = getLedgerService();
+        const [accounts, categories] = await Promise.all([
+          service.accounts({ includeArchived: true }),
+          service.categories(),
+        ]);
+        return service.importTransactions(
+          parseLedgerCsv(parsed.csv, parsed.account_id, { accounts, categories }),
+        );
       }
       const { rows } = importInput.parse(input);
       return getLedgerService().importTransactions(rows);

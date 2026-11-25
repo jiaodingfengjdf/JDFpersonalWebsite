@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/page-metadata";
 import { getCategoriesService } from "@/server/modules/categories";
 import { getPostsService } from "@/server/modules/posts";
 import { loadSiteSettings } from "@/server/modules/site-settings";
@@ -9,10 +10,11 @@ export const revalidate = 60;
 export async function generateMetadata(): Promise<Metadata> {
   const { profile } = await loadSiteSettings();
 
-  return {
+  return buildPageMetadata({
     title: `文章 · ${profile.siteTitle}`,
     description: "记录技术探索、学术研究与生活感悟",
-  };
+    path: "/posts",
+  });
 }
 
 const PAGE_SIZE = 12;

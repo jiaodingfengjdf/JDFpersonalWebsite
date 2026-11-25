@@ -13,10 +13,21 @@ export async function GET(request: Request) {
         Object.fromEntries(new URL(request.url).searchParams),
       );
       const admin = await getAdminSession();
-      const items = await getFeedService().list(admin ? params : { category: params.category, limit: params.limit });
-      return Response.json({ items: admin ? items : items.map((item) => ({ ...item, read: false, starred: false })) }, {
-        headers: { "cache-control": "private, no-store" },
-      });
+      // 已读/星标是个人状态：未登录访客的过滤条件直接忽略，返回值也屏蔽。
+      const page = await getFeedService().listPage(
+        admin
+          ? params
+          : { category: params.category, offset: params.offset, limit: params.limit },
+      );
+      return Response.json(
+        {
+          ...page,
+          items: admin
+            ? page.items
+            : page.items.map((item) => ({ ...item, read: false, starred: false })),
+        },
+        { headers: { "cache-control": "private, no-store" } },
+      );
     },
     { request },
   );

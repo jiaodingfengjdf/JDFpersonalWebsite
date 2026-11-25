@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/server/auth/guard";
 import { readJson } from "@/server/http/body";
+import { errors } from "@/server/http/errors";
 import { handle } from "@/server/http/handler";
 import { assertSameOrigin } from "@/server/http/origin";
 import { assertWritable } from "@/server/http/write-guard";
@@ -10,11 +11,20 @@ import { removeBookUpload } from "@/server/storage/books";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  return handle(async () => {
-    await requireAdmin();
-    return { items: await getLibraryService().list() };
-  }, { request });
+/** 单条书籍详情；列表逻辑在 GET /api/admin/library。 */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  return handle(
+    async () => {
+      await requireAdmin();
+      const id = Number((await params).id);
+      if (!Number.isSafeInteger(id) || id <= 0) throw errors.notFound("书不存在");
+      return { item: await getLibraryService().get(id) };
+    },
+    { request },
+  );
 }
 
 export async function PUT(

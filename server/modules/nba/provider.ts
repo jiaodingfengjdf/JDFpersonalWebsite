@@ -1,4 +1,5 @@
 import "server-only";
+import { shanghaiYmd } from "@/lib/format";
 
 export interface EspnGame {
   gameId: string;
@@ -106,6 +107,7 @@ export async function fetchScoreboard(dateYmd: string): Promise<EspnGame[]> {
   }
 }
 
+/** ESPN 的 dates 参数用 YYYYMMDD，但「今天」必须按北京时间判定。 */
 export function ymd(date: Date): string {
-  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+  return shanghaiYmd(date).replaceAll("-", "");
 }

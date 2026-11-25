@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import type { GameItemView } from "@/server/modules/games/contracts";
 
 const STATUS = [
@@ -97,9 +98,9 @@ export default function GamesManager() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        eyebrow="生活"
+        eyebrow="兴趣"
         title="游戏"
-        description="在玩 / 通关 / 愿望单，记时长与短评；前台 /games 自动分组。"
+        description="在玩 / 通关 / 愿望单 / 弃坑，记时长与短评；前台 /games 自动分组。"
         actions={
           <Button variant="outline" size="sm" onClick={() => void load()}>
             <RefreshCw className="mr-1 h-4 w-4" />
@@ -141,17 +142,16 @@ export default function GamesManager() {
           </div>
           <div className="space-y-1">
             <Label>状态</Label>
-            <select
+            <Select
               value={form.status}
               onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
               {STATUS.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="md:col-span-3">
             <Label>备注</Label>
@@ -169,30 +169,30 @@ export default function GamesManager() {
         </div>
       </Card>
 
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {loading && <p className="text-sm text-slate-500 dark:text-slate-400">加载中…</p>}
 
       <div className="space-y-2">
         {items.map((item) => (
           <Card key={item.id} className="flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{item.title}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {[item.platform, `${item.hours}h`, item.rating > 0 ? `${item.rating}★` : ""]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
             </div>
-            <select
+            <Select
               value={item.status}
               onChange={(event) => void patch(item, { status: event.target.value })}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-9 w-auto"
             >
               {STATUS.map((status) => (
                 <option key={status.value} value={status.value}>
                   {status.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button variant="ghost" size="sm" onClick={() => void remove(item)}>
               <Trash2 className="h-4 w-4" />
             </Button>

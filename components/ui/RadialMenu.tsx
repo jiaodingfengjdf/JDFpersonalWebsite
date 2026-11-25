@@ -6,10 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
   BookOpen,
-  Headphones,
-  Clapperboard,
-  Gamepad2,
-  Search,
   MessageSquare,
   Newspaper,
   FolderGit2,
@@ -17,14 +13,20 @@ import {
   Camera,
   Clock,
   Music,
-  TrendingUp,
-  Trophy,
-  Wallet,
   Bookmark,
-  CalendarDays,
+  type LucideIcon,
 } from "lucide-react";
+import { INTEREST_MODULES } from "@/lib/interest-modules";
+import { navDropdownIcons } from "@/lib/nav-dropdown-icons";
 
-const navItems = [
+interface RadialItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+/** 基础栏目 + 从单一事实来源派生的兴趣模块（搜索地址统一为 /search）。 */
+const navItems: RadialItem[] = [
   { href: "/", label: "首页", icon: Home },
   { href: "/posts", label: "文章", icon: BookOpen },
   { href: "/moments", label: "说说", icon: MessageSquare },
@@ -35,17 +37,19 @@ const navItems = [
   { href: "/photowall", label: "照片墙", icon: Camera },
   { href: "/timeline", label: "归档", icon: Clock },
   { href: "/music", label: "音乐", icon: Music },
-  { href: "/ledger", label: "记账", icon: Wallet },
-  { href: "/market", label: "行情", icon: TrendingUp },
-  { href: "/news", label: "新闻", icon: Newspaper },
-  { href: "/digest", label: "简报", icon: CalendarDays },
-  { href: "/explore", label: "搜索", icon: Search },
-  { href: "/nba", label: "NBA", icon: Trophy },
-  { href: "/library", label: "书架", icon: BookOpen },
-  { href: "/podcast", label: "播客", icon: Headphones },
-  { href: "/watch", label: "影视", icon: Clapperboard },
-  { href: "/games", label: "游戏", icon: Gamepad2 },
+  ...INTEREST_MODULES.map((module) => ({
+    href: module.href,
+    label: module.label,
+    icon: navDropdownIcons[module.icon],
+  })),
 ];
+
+const INTERACTIVE_SELECTOR =
+  'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [tabindex]:not([tabindex="-1"])';
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(INTERACTIVE_SELECTOR));
+}
 
 export default function RadialMenu() {
   const router = useRouter();
@@ -54,6 +58,7 @@ export default function RadialMenu() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [center, setCenter] = useState({ x: 0, y: 0 });
   const lastMouse = useRef({ x: 0, y: 0 });
+  const shortcutArmed = useRef(false);
   const RADIUS = 140;
 
   const getActiveIndex = useCallback((mouseX: number, mouseY: number) => {
@@ -73,24 +78,35 @@ export default function RadialMenu() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Tab") {
-        e.preventDefault();
-        (document.activeElement as HTMLElement)?.blur();
-        if (!e.repeat && lastMouse.current) {
-          setOpen(true);
-          setCenter({ x: lastMouse.current.x, y: lastMouse.current.y });
-        }
+      // Tab 属于键盘可访问性的基础导航，绝不劫持。
+      if (e.key === "Tab") return;
+      const isShortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+      if (!isShortcut) return;
+      // 输入框、按钮、链接等交互元素上聚焦时不抢快捷键。
+      if (
+        isInteractiveTarget(e.target) ||
+        isInteractiveTarget(document.activeElement)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      shortcutArmed.current = true;
+      if (!e.repeat && lastMouse.current) {
+        setOpen(true);
+        setCenter({ x: lastMouse.current.x, y: lastMouse.current.y });
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Tab") {
-        e.preventDefault();
-        if (activeIndex >= 0) {
-          router.push(navItems[activeIndex].href);
-        }
-        setOpen(false);
-        setActiveIndex(-1);
+      if (!shortcutArmed.current) return;
+      if (e.key.toLowerCase() !== "k" && e.key !== "Control" && e.key !== "Meta") {
+        return;
       }
+      shortcutArmed.current = false;
+      if (activeIndex >= 0) {
+        router.push(navItems[activeIndex].href);
+      }
+      setOpen(false);
+      setActiveIndex(-1);
     };
     const handleMouseMove = (e: MouseEvent) => {
       lastMouse.current = { x: e.clientX, y: e.clientY };
@@ -185,7 +201,7 @@ export default function RadialMenu() {
             className="absolute text-white/60 text-sm"
             style={{ left: cx, top: cy + RADIUS + 60, transform: "translateX(-50%)" }}
           >
-            松开 Tab 跳转
+            松开 Ctrl / ⌘ + K 跳转
           </div>
         </motion.div>
       )}

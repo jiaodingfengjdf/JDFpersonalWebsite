@@ -18,7 +18,12 @@ const FOCUSABLE =
  * header 带 `backdrop-blur`。backdrop-filter 会让该元素成为 fixed 后代的包含块，
  * 抽屉会被压成 header 那么高的窄条，看起来就像没打开。
  */
-export default function AdminMobileNav() {
+export default function AdminMobileNav({
+  siteTitle = "Kirameku",
+}: {
+  /** 与桌面侧栏保持一致的品牌名，由 AdminShell 从站点配置传入。 */
+  siteTitle?: string;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -122,7 +127,7 @@ export default function AdminMobileNav() {
                   </span>
                   <span>
                     <span className="block text-sm font-semibold tracking-wide text-slate-900 dark:text-slate-100">
-                      Kirameku
+                      {siteTitle}
                     </span>
                     <span className="block text-[11px] text-slate-500">
                       Admin Console

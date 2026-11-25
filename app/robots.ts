@@ -14,8 +14,9 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         userAgent: "*",
         allow: "/",
         // /garden 是密码门禁区：未解锁时服务端渲染的是空壳，
-        // 爬虫抓到的只有空白页，直接挡在 robots 外面；/search 是查询页。
-        disallow: ["/admin", "/api", "/auth", "/garden", "/search"],
+        // 爬虫抓到的只有空白页，直接挡在 robots 外面；/search 是查询页，
+        // /explore 是通往它的旧入口，同样不希望被抓。
+        disallow: ["/admin", "/api", "/auth", "/garden", "/search", "/explore"],
       },
     ],
     sitemap: `${base}/sitemap.xml`,

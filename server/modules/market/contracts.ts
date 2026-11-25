@@ -112,6 +112,8 @@ export interface MarketQuoteItem {
   stale: boolean;
   /** 计价货币：A 股/基金为 CNY，美股为 USD */
   currency: "CNY" | "USD";
+  /** 后台编辑持仓时要原样回传，避免把排序改成 id。 */
+  sort: number;
   cost: number | null;
   shares: number | null;
   /** 有持仓时才有：市值 / 盈亏 / 盈亏率 */
@@ -160,7 +162,7 @@ export interface MarketCandle {
 }
 
 export interface MarketLinePoint {
-  /** 分时：2026-11-23 22:30；日/周/月：2026-11-23 */
+  /** 分时：2026-11-23 22:30；日K/周K/月K：2026-11-23 */
   label: string;
   value: number;
   /** 分时均价 */

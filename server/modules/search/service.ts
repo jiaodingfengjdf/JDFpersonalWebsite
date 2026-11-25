@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, sql } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
 import type { SearchHit, SearchQuery, SearchResult } from "./contracts";
 
@@ -131,12 +131,24 @@ export function createSearchService(db: AppDatabase) {
     return { rows, total: count?.total ?? 0 };
   }
 
-  /** 关键词短于 3 字符时的兜底：直接 LIKE 扫描，个人博客的数据量下够用。 */
+  /**
+   * 关键词短于 3 字符时的兜底：直接 LIKE 扫描，个人博客的数据量下够用。
+   * 语义与 FTS 路径对齐：每个 token 各自在 title/description/content 间 OR，
+   * token 之间取 AND，而不是把整串当成一个连续子串。
+   */
   async function searchWithLike(
-    query: string,
+    tokens: string[],
     limit: number,
   ): Promise<{ rows: RawRow[]; total: number }> {
-    const pattern = toLikePattern(query);
+    const filter = and(
+      sql`p."status" IN ('published', 'unpublish_scheduled')`,
+      ...tokens.map((token) => {
+        const pattern = toLikePattern(token);
+        return sql`(p."title" LIKE ${pattern}
+          OR p."description" LIKE ${pattern}
+          OR p."content" LIKE ${pattern})`;
+      }),
+    );
 
     const rows = await db.all<RawRow>(sql`
       SELECT p."id" AS id,
@@ -148,10 +160,7 @@ export function createSearchService(db: AppDatabase) {
              c."name" AS category
       FROM "post" p
       LEFT JOIN "category" c ON c."id" = p."category_id"
-      WHERE p."status" IN ('published', 'unpublish_scheduled')
-        AND (p."title" LIKE ${pattern}
-          OR p."description" LIKE ${pattern}
-          OR p."content" LIKE ${pattern})
+      WHERE ${filter}
       ORDER BY p."published_at" DESC
       LIMIT ${limit}
     `);
@@ -159,10 +168,7 @@ export function createSearchService(db: AppDatabase) {
     const [count] = await db.all<CountRow>(sql`
       SELECT count(*) AS total
       FROM "post" p
-      WHERE p."status" IN ('published', 'unpublish_scheduled')
-        AND (p."title" LIKE ${pattern}
-          OR p."description" LIKE ${pattern}
-          OR p."content" LIKE ${pattern})
+      WHERE ${filter}
     `);
 
     return { rows, total: count?.total ?? 0 };
@@ -177,7 +183,7 @@ export function createSearchService(db: AppDatabase) {
       const fuzzy = tokens.some((token) => charLength(token) < MIN_MATCH_CHARS);
 
       const { rows, total } = fuzzy
-        ? await searchWithLike(query, input.limit)
+        ? await searchWithLike(tokens, input.limit)
         : await searchWithIndex(toMatchExpression(tokens), input.limit);
 
       return {

@@ -38,6 +38,7 @@ import {
   type NavDropdownLink,
 } from "@/lib/nav-dropdown";
 import { navDropdownIcons } from "@/lib/nav-dropdown-icons";
+import { defaultInterestDropdownConfig } from "@/lib/interest-modules";
 
 const SettingsPanel = dynamic(() => import("@/components/ui/SettingsPanel"), { ssr: false });
 
@@ -113,7 +114,12 @@ function NavDropdownItem({
   );
 }
 
-export default function Navbar() {
+export default function Navbar({
+  navDropdown: initialNavDropdown,
+}: {
+  /** 服务端读取的导航配置；SSR 就能渲染出「兴趣」，客户端仍会再刷新一次。 */
+  navDropdown?: NavDropdownConfig;
+} = {}) {
   const { profile } = useSiteSettings();
   const pathname = usePathname();
   const { toggleTheme } = useTheme();
@@ -123,24 +129,28 @@ export default function Navbar() {
   const [easterEgg, setEasterEgg] = useState(false);
   const clickTimes = useRef<number[]>([]);
 
-  // 导航栏自定义下拉菜单：配置存在站点配置里，由 /api/nav-dropdown 读取。
-  // 读不到或不合法时保持 null，导航栏退回纯静态链接，不影响整站渲染。
-  const [navDropdown, setNavDropdown] = useState<NavDropdownConfig | null>(null);
+  // 导航栏「兴趣」下拉菜单：初值来自服务端（SSR 可见），客户端再异步刷新。
+  // 接口失败时保留服务端配置；解析结果为空时回落到默认菜单，栏目永不消失。
+  const [navDropdown, setNavDropdown] = useState<NavDropdownConfig>(
+    () => initialNavDropdown ?? defaultInterestDropdownConfig(),
+  );
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileGroupOpen, setIsMobileGroupOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // hover 只负责鼠标打开；点开后交给 click/outside-click 管理，避免两者互相打架。
+  const openedByHover = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/nav-dropdown", { signal: controller.signal, cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: unknown) => {
-        if (!controller.signal.aborted) {
-          setNavDropdown(parseNavDropdownConfig(payload));
-        }
+        if (controller.signal.aborted) return;
+        const parsed = parseNavDropdownConfig(payload);
+        setNavDropdown(parsed.links.length > 0 ? parsed : defaultInterestDropdownConfig());
       })
       .catch(() => {
-        // 拿不到配置时就当作没有自定义菜单。
+        // 拿不到配置就沿用服务端注入的值，不把栏目清掉。
       });
     return () => controller.abort();
   }, []);
@@ -276,11 +286,13 @@ export default function Navbar() {
         setIsSettingsOpen(false);
       }
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        openedByHover.current = false;
         setIsDropdownOpen(false);
       }
     };
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        openedByHover.current = false;
         setIsSettingsOpen(false);
         setIsDropdownOpen(false);
       }
@@ -297,9 +309,7 @@ export default function Navbar() {
   if (pathname.startsWith("/garden")) return null;
 
   const activeDropdown =
-    navDropdown && navDropdown.enabled && navDropdown.links.length > 0
-      ? navDropdown
-      : null;
+    navDropdown.enabled && navDropdown.links.length > 0 ? navDropdown : null;
   const DropdownIcon = activeDropdown ? navDropdownIcons[activeDropdown.icon] : Link2;
   const dropdownActive = activeDropdown
     ? activeDropdown.links.some((link) => isNavLinkActive(pathname, link.href))
@@ -380,17 +390,28 @@ export default function Navbar() {
                 <div
                   ref={dropdownRef}
                   className="relative"
-                  onMouseEnter={() => setIsDropdownOpen(true)}
-                  onMouseLeave={() => setIsDropdownOpen(false)}
+                  // 仅真实鼠标支持悬停展开；触屏的合成 hover 不参与，交给 onClick。
+                  onMouseEnter={() => {
+                    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+                    openedByHover.current = true;
+                    setIsDropdownOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    if (!openedByHover.current) return;
+                    openedByHover.current = false;
+                    setIsDropdownOpen(false);
+                  }}
                 >
                   <button
                     type="button"
-                    // 鼠标点击时 detail >= 1，而此时 onMouseEnter 已经把菜单打开，
-                    // 再切换一次会立刻关掉；只有键盘（Enter/Space，detail === 0）才需要切换。
-                    onClick={(event) => {
-                      if (event.detail === 0) {
-                        setIsDropdownOpen((open) => !open);
+                    // 鼠标 / 触屏 / 键盘一律 toggle。若菜单是本轮 hover 打开的，
+                    // 这次点击只是把控制权从 hover 交给 click，不再额外关闭。
+                    onClick={() => {
+                      if (openedByHover.current) {
+                        openedByHover.current = false;
+                        return;
                       }
+                      setIsDropdownOpen((open) => !open);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
@@ -515,6 +536,25 @@ export default function Navbar() {
         </div>
       </nav>
 
+      {/* 无 JS / 仅看 HTML 的爬虫：服务端阶段就把兴趣入口写进页面，避免栏目不可发现。 */}
+      {activeDropdown ? (
+        <noscript>
+          <div style={{ padding: "4.5rem 1rem 1rem" }}>
+            <p>{activeDropdown.label}</p>
+            <ul>
+              {activeDropdown.links.map((link) => (
+                <li key={`${link.label}-${link.href}`}>
+                  <a href={link.href}>
+                    {link.label}
+                    {link.description ? `：${link.description}` : ""}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </noscript>
+      ) : null}
+
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
@@ -546,8 +586,8 @@ export default function Navbar() {
                 );
               })}
 
-              {/* 自定义下拉菜单：移动端变成可展开的一组 */
-              activeDropdown && (
+              {/* 自定义下拉菜单：移动端变成可展开的一组 */}
+              {activeDropdown && (
                 <div className="mt-1 border-t border-slate-200/60 pt-1 dark:border-white/10">
                   <button
                     type="button"

@@ -6,34 +6,36 @@ import {
   BarChart3,
   BellRing,
   Bookmark,
-  BookOpen,
-  Clapperboard,
   DatabaseBackup,
   FileText,
   FolderKanban,
   FolderOpen,
-  Gamepad2,
-  Headphones,
   ImageIcon,
   Images,
   LayoutDashboard,
   Link2,
   MessageSquare,
   Navigation,
-  Newspaper,
   Palette,
   ScrollText,
   Settings,
   SlidersHorizontal,
-  TrendingUp,
-  Trophy,
   UserRound,
   Users,
-  Wallet,
+  type LucideIcon,
 } from "lucide-react";
+import { INTEREST_LABEL, INTEREST_MODULES } from "@/lib/interest-modules";
+import { navDropdownIcons } from "@/lib/nav-dropdown-icons";
 import { cn } from "@/lib/utils";
 
-const primaryItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+}
+
+const primaryItems: NavItem[] = [
   { href: "/admin", label: "仪表盘", icon: LayoutDashboard, exact: true },
   { href: "/admin/posts", label: "文章", icon: FileText },
   { href: "/admin/chatters", label: "说说", icon: MessageSquare },
@@ -42,14 +44,6 @@ const primaryItems = [
   { href: "/admin/messages", label: "留言", icon: MessageSquare },
   { href: "/admin/taxonomy", label: "分类 / 标签", icon: FolderOpen },
   { href: "/admin/friend-links", label: "友链", icon: Link2 },
-  { href: "/admin/ledger", label: "记账", icon: Wallet },
-  { href: "/admin/market", label: "行情", icon: TrendingUp },
-  { href: "/admin/news", label: "新闻", icon: Newspaper },
-  { href: "/admin/nba", label: "NBA", icon: Trophy },
-  { href: "/admin/library", label: "书架", icon: BookOpen },
-  { href: "/admin/podcast", label: "播客", icon: Headphones },
-  { href: "/admin/watch", label: "影视", icon: Clapperboard },
-  { href: "/admin/games", label: "游戏", icon: Gamepad2 },
   { href: "/admin/collection", label: "收藏", icon: Bookmark },
   { href: "/admin/bookmarks", label: "收藏分类", icon: FolderOpen },
   { href: "/admin/albums", label: "相册", icon: Images },
@@ -66,15 +60,25 @@ const primaryItems = [
   { href: "/admin/account", label: "账号", icon: UserRound },
 ];
 
-export default function AdminNav() {
+/** 兴趣模块的后台入口：顺序与前台 INTEREST_MODULES 完全一致。 */
+const interestItems: NavItem[] = INTEREST_MODULES.flatMap((module) =>
+  module.adminHref
+    ? [
+        {
+          href: module.adminHref,
+          label: module.label,
+          icon: navDropdownIcons[module.icon],
+        },
+      ]
+    : [],
+);
+
+function NavLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
 
   return (
-    <nav className="mt-8 space-y-1" aria-label="后台导航">
-      <p className="px-3 pb-2 text-[10px] font-semibold tracking-[0.18em] text-slate-500 uppercase dark:text-slate-600">
-        Workspace
-      </p>
-      {primaryItems.map((item) => {
+    <>
+      {items.map((item) => {
         const Icon = item.icon;
         const active = item.exact
           ? pathname === item.href
@@ -105,6 +109,20 @@ export default function AdminNav() {
           </Link>
         );
       })}
+    </>
+  );
+}
+
+const groupTitleClass =
+  "px-3 pb-2 pt-4 text-[10px] font-semibold tracking-[0.18em] text-slate-500 uppercase first:pt-0 dark:text-slate-600";
+
+export default function AdminNav() {
+  return (
+    <nav className="mt-8 space-y-1" aria-label="后台导航">
+      <p className={groupTitleClass}>Workspace</p>
+      <NavLinks items={primaryItems} />
+      <p className={groupTitleClass}>{INTEREST_LABEL}</p>
+      <NavLinks items={interestItems} />
     </nav>
   );
 }

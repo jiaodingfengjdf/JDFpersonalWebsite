@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/page-metadata";
 import type { Album } from "@/components/photos/AlbumCard";
 import type { Photo } from "@/types/photo";
 import { getAlbumsService } from "@/server/modules/albums";
@@ -10,10 +11,11 @@ export const revalidate = 300;
 export async function generateMetadata(): Promise<Metadata> {
   const { profile } = await loadSiteSettings();
 
-  return {
+  return buildPageMetadata({
     title: `照片墙 · ${profile.siteTitle}`,
     description: "用照片记录生活的每一个瞬间",
-  };
+    path: "/photowall",
+  });
 }
 
 async function loadAlbums(): Promise<Album[]> {

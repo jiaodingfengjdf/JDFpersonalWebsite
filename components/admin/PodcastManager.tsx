@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatDateTime } from "@/lib/format";
 import type { PodcastShowView } from "@/server/modules/podcast/contracts";
 
 export default function PodcastManager() {
@@ -102,7 +103,7 @@ export default function PodcastManager() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        eyebrow="生活"
+        eyebrow="兴趣"
         title="播客"
         description="粘贴播客 RSS 订阅；前台 /podcast 站内播放并记住收听位置。"
         actions={
@@ -137,12 +138,12 @@ export default function PodcastManager() {
         </div>
       </Card>
 
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {loading && <p className="text-sm text-slate-500 dark:text-slate-400">加载中…</p>}
 
       <div className="space-y-2">
         {shows.map((show) => (
           <Card key={show.id} className="flex flex-wrap items-center gap-3 p-3">
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-slate-200/60 dark:bg-slate-700/60">
               {show.cover ? (
                 // eslint-disable-next-line @next/next/no-img-element -- 封面来自播客 RSS
                 <img src={show.cover} alt="" className="h-full w-full object-cover" />
@@ -150,10 +151,10 @@ export default function PodcastManager() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{show.title}</p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                 {show.author || "未知主播"} · {show.episode_count} 集
                 {show.last_checked_at
-                  ? ` · ${new Date(show.last_checked_at).toLocaleString("zh-CN")}`
+                  ? ` · ${formatDateTime(show.last_checked_at)}`
                   : " · 未抓取"}
               </p>
               {show.last_error && <p className="text-xs text-rose-500">{show.last_error}</p>}

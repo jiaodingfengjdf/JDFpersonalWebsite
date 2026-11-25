@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PodcastManager from "@/components/admin/PodcastManager";
 
 export const metadata: Metadata = {
-  title: "播客 · Kirameku Admin",
+  title: "播客 · 兴趣",
   robots: { index: false, follow: false },
 };
 

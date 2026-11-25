@@ -13,11 +13,22 @@ export const sourceInput = z.object({
 
 export type SourceInput = z.infer<typeof sourceInput>;
 
+/**
+ * 查询串里的布尔只认字面 `true` / `1`（或真正的布尔、数字 1）。
+ * `z.coerce.boolean()` 会把任意非空字符串当成 true，包括 "false"，
+ * 于是 `?unread=false` 反而筛出未读条目。
+ */
+function queryBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return value === true || value === 1 || value === "true" || value === "1";
+}
+
 export const itemQuery = z.object({
   category: z.enum(feedCategories).optional(),
-  unread: z.coerce.boolean().optional(),
-  starred: z.coerce.boolean().optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(60),
+  unread: z.preprocess(queryBoolean, z.boolean().optional()),
+  starred: z.preprocess(queryBoolean, z.boolean().optional()),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(60),
 });
 
 export const itemPatch = z.object({
@@ -49,4 +60,11 @@ export interface FeedItemView {
   published_at: number;
   read: boolean;
   starred: boolean;
+}
+
+/** 分页列表：total 与 items 共用同一套 WHERE，hasMore 由偏移与总数推导。 */
+export interface FeedItemPage {
+  items: FeedItemView[];
+  total: number;
+  hasMore: boolean;
 }

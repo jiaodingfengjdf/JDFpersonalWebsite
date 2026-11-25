@@ -12,11 +12,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatMoney } from "@/lib/format";
 import type { LedgerSummary } from "@/server/modules/ledger/contracts";
 
 const COLORS = ["#0284c7", "#f59e0b", "#8b5cf6", "#10b981", "#f43f5e", "#0ea5e9", "#64748b"];
-const money = (value: number) =>
-  value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 type Props = {
   daily: LedgerSummary["daily"];
@@ -80,7 +79,7 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
                   />
                   <Tooltip
                     labelFormatter={(value) => String(value)}
-                    formatter={(value, name) => [`¥ ${money(Number(value))}`, String(name)]}
+                    formatter={(value, name) => [formatMoney(Number(value)), String(name)]}
                   />
                   <Area
                     type="monotone"
@@ -117,8 +116,8 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
                   {daily.map((day) => (
                     <tr key={day.date}>
                       <td className="py-1.5">{day.date}</td>
-                      <td className="text-right tabular-nums">{money(day.income)}</td>
-                      <td className="text-right tabular-nums">{money(day.expense)}</td>
+                      <td className="text-right tabular-nums">{formatMoney(day.income)}</td>
+                      <td className="text-right tabular-nums">{formatMoney(day.expense)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -155,7 +154,7 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
                       <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `¥ ${money(Number(value))}`} />
+                  <Tooltip formatter={(value) => formatMoney(Number(value))} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -171,7 +170,7 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
                     {item.name}
                   </span>
                   <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
-                    {money(item.value)}
+                    {formatMoney(item.value)}
                   </span>
                 </li>
               ))}

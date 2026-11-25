@@ -6,14 +6,22 @@ import AdminError from "./AdminError";
 import AdminPageHeader from "./AdminPageHeader";
 import { useConfirm } from "./ConfirmProvider";
 import { adminRequest, describeAdminError } from "./admin-api";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import type { MarketAlertItem, MarketOverview } from "@/server/modules/market/contracts";
 
-const money = (value: number) =>
-  value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+type QuoteItem = MarketOverview["items"][number];
+
+/** 指数是点位：不带币种符号，补「点」；基金由 formatMoney 自动保留 4 位。 */
+function quote(value: number | null, item: QuoteItem): string {
+  if (value === null) return "—";
+  const body = formatMoney(value, { currency: item.currency, kind: item.kind });
+  return item.kind === "index" ? `${body} 点` : body;
+}
 
 const RULE_OPTIONS: Array<{ value: MarketAlertItem["rule"]; label: string; hint: string }> = [
   { value: "up_pct", label: "涨幅达到（%）", hint: "当日涨幅大于等于该值时提醒，例如 3" },
@@ -94,12 +102,7 @@ export default function MarketManager() {
     }
   }
 
-  async function saveHolding(
-    id: number,
-    item: MarketOverview["items"][number],
-    cost: string,
-    shares: string,
-  ) {
+  async function saveHolding(id: number, item: QuoteItem, cost: string, shares: string) {
     try {
       await adminRequest(`/api/admin/market/${id}`, {
         method: "PUT",
@@ -110,7 +113,7 @@ export default function MarketManager() {
           name: item.name,
           cost: cost ? Number(cost) : null,
           shares: shares ? Number(shares) : null,
-          sort: item.id,
+          sort: item.sort,
         }),
       });
       await load();
@@ -191,9 +194,9 @@ export default function MarketManager() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        eyebrow="投资"
+        eyebrow="兴趣"
         title="行情"
-        description="自选基金、股票与指数；填了成本价和份额后，首页/行情页会算浮动盈亏。数据来自腾讯公开行情接口。"
+        description="自选 A 股、美股、基金与指数；填了成本价和份额后，首页/行情页会算浮动盈亏。报价来自腾讯（A 股/基金）+ 东方财富（美股/指数/K线/净值）。"
         actions={
           <Button variant="outline" size="sm" onClick={() => void load()}>
             <RefreshCw className="mr-1 h-4 w-4" />
@@ -208,24 +211,26 @@ export default function MarketManager() {
         <div className="grid gap-4 md:grid-cols-2">
           {data.totals.map((total) => (
             <Card key={total.currency} className="p-4">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {total.currency === "USD" ? "美元持仓" : "人民币持仓"}
               </p>
               <dl className="mt-2 grid grid-cols-3 gap-3 text-sm">
                 <div>
-                  <dt className="text-xs text-muted-foreground">市值</dt>
+                  <dt className="text-xs text-slate-500 dark:text-slate-400">市值</dt>
                   <dd className="font-semibold">
-                    {total.value === null ? "行情不足" : `${total.currency === "USD" ? "$" : "¥"} ${money(total.value)}`}
+                    {total.value === null
+                      ? "行情不足"
+                      : formatMoney(total.value, { currency: total.currency })}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">成本</dt>
+                  <dt className="text-xs text-slate-500 dark:text-slate-400">成本</dt>
                   <dd className="font-semibold">
-                    {`${total.currency === "USD" ? "$" : "¥"} ${money(total.cost)}`}
+                    {formatMoney(total.cost, { currency: total.currency })}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">浮动盈亏</dt>
+                  <dt className="text-xs text-slate-500 dark:text-slate-400">浮动盈亏</dt>
                   <dd
                     className={`font-semibold ${
                       (total.profit ?? 0) >= 0 ? "text-rose-600" : "text-emerald-600"
@@ -233,7 +238,7 @@ export default function MarketManager() {
                   >
                     {total.profit === null
                       ? "行情不足"
-                      : `${total.currency === "USD" ? "$" : "¥"} ${money(total.profit)}`}
+                      : formatMoney(total.profit, { currency: total.currency })}
                   </dd>
                 </div>
               </dl>
@@ -249,7 +254,7 @@ export default function MarketManager() {
         <div className="grid gap-3 p-4 pt-0 md:grid-cols-4 xl:grid-cols-7">
           <div className="space-y-1">
             <Label>市场</Label>
-            <select
+            <Select
               value={form.market}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -258,23 +263,21 @@ export default function MarketManager() {
                   kind: event.target.value === "us" && prev.kind === "fund" ? "stock" : prev.kind,
                 }))
               }
-              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
-              <option value="cn">A 股 / 基金</option>
+              <option value="cn">A 股 / 基金 / 指数</option>
               <option value="us">美股 / 美股指数</option>
-            </select>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label>类型</Label>
-            <select
+            <Select
               value={form.kind}
               onChange={(event) => setForm((prev) => ({ ...prev, kind: event.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
               <option value="stock">股票</option>
               <option value="index">指数</option>
               {form.market === "cn" && <option value="fund">基金</option>}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label>代码</Label>
@@ -317,14 +320,14 @@ export default function MarketManager() {
         </div>
       </Card>
 
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {loading && <p className="text-sm text-slate-500 dark:text-slate-400">加载中…</p>}
 
       <div className="space-y-2">
         {(data?.items ?? []).map((item) => (
           <Card key={item.id} className="grid items-center gap-3 p-3 md:grid-cols-[1.4fr_repeat(4,1fr)_auto]">
             <div>
               <p className="font-medium">{item.name}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {item.code} · {item.market === "us" ? "美股" : "A股"} ·{" "}
                 {item.kind === "fund" ? "基金" : item.kind === "index" ? "指数" : "股票"}
                 {item.stale ? " · 缓存" : ""}
@@ -332,33 +335,27 @@ export default function MarketManager() {
             </div>
             <div className="text-sm">
               <p className={item.change_pct >= 0 ? "text-rose-600" : "text-emerald-600"}>
-                {item.price > 0 ? `${item.currency === "USD" ? "$" : "¥"}${money(item.price)}` : "—"}
+                {item.price > 0 ? quote(item.price, item) : "—"}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {item.change_pct >= 0 ? "+" : ""}
                 {item.change_pct.toFixed(2)}%
               </p>
             </div>
             <div className="text-sm">
-              <p className="text-xs text-muted-foreground">成本 / 份额</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">成本 / 份额</p>
               <p>
                 {item.cost ?? "—"} / {item.shares ?? "—"}
               </p>
             </div>
             <div className="text-sm">
-              <p className="text-xs text-muted-foreground">市值</p>
-              <p>
-                {item.market_value === null
-                  ? "—"
-                  : `${item.currency === "USD" ? "$" : "¥"}${money(item.market_value)}`}
-              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">市值</p>
+              <p>{quote(item.market_value, item)}</p>
             </div>
             <div className="text-sm">
-              <p className="text-xs text-muted-foreground">盈亏</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">盈亏</p>
               <p className={(item.profit ?? 0) >= 0 ? "text-rose-600" : "text-emerald-600"}>
-                {item.profit === null
-                  ? "—"
-                  : `${item.currency === "USD" ? "$" : "¥"}${money(item.profit)}`}
+                {quote(item.profit, item)}
                 {item.profit_pct !== null ? ` (${item.profit_pct.toFixed(2)}%)` : ""}
               </p>
             </div>
@@ -392,10 +389,9 @@ export default function MarketManager() {
           <div className="grid gap-3 md:grid-cols-[1.2fr_1.3fr_1fr_auto]">
             <div className="space-y-1">
               <Label>自选标的</Label>
-              <select
+              <Select
                 value={alertForm.watchId}
                 onChange={(event) => setAlertForm((prev) => ({ ...prev, watchId: event.target.value }))}
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
               >
                 <option value="">选择标的</option>
                 {(data?.items ?? []).map((item) => (
@@ -403,21 +399,20 @@ export default function MarketManager() {
                     {item.name}（{item.code}）
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>规则</Label>
-              <select
+              <Select
                 value={alertForm.rule}
                 onChange={(event) => setAlertForm((prev) => ({ ...prev, rule: event.target.value }))}
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
               >
                 {RULE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>阈值</Label>
@@ -438,25 +433,31 @@ export default function MarketManager() {
           </div>
 
           {alerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">还没有提醒规则。</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">还没有提醒规则。</p>
           ) : (
             <div className="space-y-2">
               {alerts.map((item) => (
                 <div
                   key={item.id}
-                  className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-white/10"
                 >
                   <span className="font-medium">{item.name}</span>
-                  <span className="text-muted-foreground">
+                  <span className="text-slate-500 dark:text-slate-400">
                     {RULE_LABEL[item.rule]} {item.threshold}
                     {item.rule.endsWith("_pct") ? "%" : ""}
                   </span>
-                  <span className={item.enabled ? "text-emerald-600" : "text-muted-foreground"}>
+                  <span
+                    className={
+                      item.enabled
+                        ? "text-emerald-600"
+                        : "text-slate-500 dark:text-slate-400"
+                    }
+                  >
                     {item.enabled ? "已启用" : "已停用"}
                   </span>
                   {item.last_fired_at && (
-                    <span className="text-xs text-muted-foreground">
-                      上次提醒 {new Date(item.last_fired_at).toLocaleString("zh-CN")}
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      上次提醒 {formatDateTime(item.last_fired_at)}
                     </span>
                   )}
                   <span className="ml-auto flex gap-1">
@@ -472,14 +473,14 @@ export default function MarketManager() {
             </div>
           )}
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             规则由站内通知调度器定期评估，需在「预警通知」里启用「行情涨跌提醒」并选择推送渠道；单条规则 30 分钟内不重复提醒。
           </p>
         </div>
       </Card>
 
-      <p className="text-xs text-muted-foreground">
-        数据来源：腾讯行情（qt.gtimg.cn），60 秒缓存；行情仅供参考，不构成投资建议。
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        数据来源：腾讯（A 股/基金）+ 东方财富（美股/指数/K线/净值）；行情仅供参考，不构成投资建议。
       </p>
     </div>
   );

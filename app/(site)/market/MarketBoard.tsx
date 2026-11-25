@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, RefreshCw, Search, TrendingUp } from "lucide-react";
+import FilterTabs from "@/components/site/FilterTabs";
+import { formatClock, formatMoney } from "@/lib/format";
 import type {
   MarketCurrencyTotals,
   MarketHistory,
@@ -32,15 +34,14 @@ const PERIODS: Array<{ key: MarketPeriod; label: string; hint: string }> = [
 const MARKET_LABEL: Record<string, string> = { cn: "A股", us: "美股" };
 const KIND_LABEL: Record<string, string> = { stock: "股票", index: "指数", fund: "基金" };
 
-// 指数点位以「点」计价，不是货币，所以不加 ¥/$，避免把 7237 点读成 7237 美元。
-const money = (value: number, currency: "CNY" | "USD", kind: string = "stock") => {
-  const digits = kind === "fund" ? 4 : Math.abs(value) >= 1 ? 2 : 4;
-  const body = value.toLocaleString("zh-CN", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
-  return kind === "index" ? body : `${currency === "USD" ? "$" : "¥"}${body}`;
-};
+// 指数点位以「点」计价，不是货币，所以不加 ¥/$；基金固定 4 位。
+// 委托给共享 formatMoney，保证前后台同一标的的精度与符号口径一致。
+const money = (
+  value: number,
+  currency: "CNY" | "USD",
+  kind: MarketQuoteItem["kind"] = "stock",
+  sign = false,
+) => formatMoney(value, { currency, kind, sign });
 
 const compactVolume = (value: number) => {
   if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(2)} 亿`;
@@ -61,6 +62,7 @@ export default function MarketBoard({
   initialSymbol,
   initialPeriod,
   initialFilter,
+  initialHistory,
   isAdmin,
 }: {
   items: MarketQuoteItem[];
@@ -69,6 +71,8 @@ export default function MarketBoard({
   initialSymbol: number | null;
   initialPeriod: MarketPeriod;
   initialFilter: Filter;
+  /** 服务端已取好的首屏历史，避免默认标的/周期在客户端再请求一次。 */
+  initialHistory?: MarketHistory | null;
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -78,10 +82,23 @@ export default function MarketBoard({
     initialSymbol ?? items[0]?.id ?? null,
   );
   const [period, setPeriod] = useState<MarketPeriod>(initialPeriod);
+
+  // 首屏历史由服务端随页面带下来，键必须与客户端派生的请求键完全一致，
+  // 否则会再请求一次，或把上一只标的的数据错配到当前标的。
+  const initialItemId = initialSymbol ?? items[0]?.id ?? null;
+  const initialItem = items.find((item) => item.id === initialItemId);
+  const initialActivePeriod: MarketPeriod =
+    initialItem?.kind === "fund" && initialPeriod === "intraday" ? "day" : initialPeriod;
+  const initialResult =
+    initialHistory && initialItemId !== null
+      ? { key: `${initialItemId}:${initialActivePeriod}:0`, data: initialHistory }
+      : null;
+
   // 以「请求键」判定加载态：不在 effect 里同步 setState，避免级联渲染。
-  const [result, setResult] = useState<{ key: string; data: MarketHistory } | null>(null);
+  const [result, setResult] = useState<{ key: string; data: MarketHistory } | null>(initialResult);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const resolvedKeyRef = useRef<string | null>(initialResult?.key ?? null);
 
   const visible = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -100,9 +117,10 @@ export default function MarketBoard({
     });
   }, [items, filter, query]);
 
+  // 筛选/搜索无匹配时不要回退到列表第一只，否则详情与 URL 都会指向看不到的标的。
   const selected = useMemo(
-    () => visible.find((item) => item.id === symbolId) ?? visible[0] ?? items[0] ?? null,
-    [visible, items, symbolId],
+    () => visible.find((item) => item.id === symbolId) ?? null,
+    [visible, symbolId],
   );
 
   // 基金没有分时，统一按日线展示；不改用户选的周期，切回股票时仍生效。
@@ -116,9 +134,13 @@ export default function MarketBoard({
 
   useEffect(() => {
     if (!activeSymbol) return;
+    const key = `${activeSymbol}:${activePeriod}:${nonce}`;
+    // 只在收到响应后标记已解析：StrictMode 二次挂载会 abort 首次请求，
+    // 发请求前就置位会让第二次挂载早退，界面永久停在加载态。
+    if (resolvedKeyRef.current === key) return;
+
     const controller = new AbortController();
     let active = true;
-    const key = `${activeSymbol}:${activePeriod}:${nonce}`;
     fetch(`/api/market/history?id=${activeSymbol}&period=${activePeriod}`, {
       signal: controller.signal,
     })
@@ -127,11 +149,14 @@ export default function MarketBoard({
         return (await response.json()) as MarketHistory;
       })
       .then((data) => {
-        if (active) setResult({ key, data });
+        if (!active) return;
+        resolvedKeyRef.current = key;
+        setResult({ key, data });
       })
       .catch((reason: unknown) => {
         if (!active) return;
         if (reason instanceof DOMException && reason.name === "AbortError") return;
+        resolvedKeyRef.current = key;
         setFailedKey(key);
       });
     return () => {
@@ -256,24 +281,13 @@ export default function MarketBoard({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="市场筛选" className="flex gap-1 rounded-full border border-white/40 p-1 dark:border-white/10">
-          {FILTERS.map((entry) => (
-            <button
-              key={entry.key}
-              type="button"
-              role="tab"
-              aria-selected={filter === entry.key}
-              onClick={() => setFilter(entry.key)}
-              className={`rounded-full px-3 py-1 text-xs transition ${
-                filter === entry.key
-                  ? "bg-sky-500 text-white"
-                  : "text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-white/10"
-              }`}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
+        <FilterTabs
+          items={FILTERS}
+          value={filter}
+          onChange={(next) => setFilter(next)}
+          variant="segmented"
+          aria-label="市场筛选"
+        />
 
         <label className="relative ml-auto flex items-center">
           <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-slate-400" />
@@ -345,7 +359,9 @@ export default function MarketBoard({
                           {item.price > 0 ? money(item.price, item.currency, item.kind) : "—"}
                         </span>
                         <span className="text-[11px] text-slate-400">
-                          {item.market_value !== null ? `市值 ${money(item.market_value, item.currency)}` : item.time}
+                          {item.market_value !== null
+                            ? `市值 ${money(item.market_value, item.currency, item.kind)}`
+                            : item.time}
                         </span>
                       </div>
                     </button>
@@ -421,7 +437,7 @@ export default function MarketBoard({
                   </p>
                   <p className={`text-xs tabular-nums ${trendClass(selected.change_pct)}`}>
                     {selected.price > 0
-                      ? `${selected.change >= 0 ? "+" : ""}${selected.change.toFixed(2)} · ${
+                      ? `${money(selected.change, currency, selected.kind, true)} · ${
                           selected.change_pct >= 0 ? "+" : ""
                         }${selected.change_pct.toFixed(2)}%`
                       : "暂无报价"}
@@ -443,38 +459,35 @@ export default function MarketBoard({
               {isAdmin && selected.cost !== null && selected.shares !== null && selected.shares > 0 && (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   持仓 {selected.shares} 份 · 成本 {money(selected.cost, currency, selected.kind)} · 市值{" "}
-                  {selected.market_value === null ? "—" : money(selected.market_value, currency)} · 盈亏{" "}
+                  {selected.market_value === null
+                    ? "—"
+                    : money(selected.market_value, currency, selected.kind)} · 盈亏{" "}
                   <span className={trendClass(selected.profit ?? 0)}>
-                    {selected.profit === null ? "—" : money(selected.profit, currency)}
+                    {selected.profit === null
+                      ? "—"
+                      : money(selected.profit, currency, selected.kind)}
                     {selected.profit_pct !== null ? `（${selected.profit_pct.toFixed(2)}%）` : ""}
                   </span>
                 </p>
               )}
 
-              <div role="tablist" aria-label="时间周期" className="mt-4 flex flex-wrap gap-1 border-b border-white/30 pb-2 dark:border-white/10">
-                {PERIODS.map((entry) => {
-                  const disabled = selected.kind === "fund" && entry.key === "intraday";
-                  return (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={activePeriod === entry.key}
-                      disabled={disabled}
-                      title={disabled ? "基金按日披露净值，没有分时" : entry.hint}
-                      onClick={() => setPeriod(entry.key)}
-                      className={`rounded-md px-2.5 py-1 text-xs transition ${
-                        activePeriod === entry.key
-                          ? "bg-sky-500 text-white"
-                          : disabled
-                            ? "cursor-not-allowed text-slate-300 dark:text-slate-600"
-                            : "text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-white/10"
-                      }`}
-                    >
-                      {entry.label}
-                    </button>
-                  );
-                })}
+              <div className="mt-4 flex flex-wrap items-center gap-1 border-b border-white/30 pb-2 dark:border-white/10">
+                <FilterTabs
+                  items={PERIODS.map((entry) => {
+                    const disabled = selected.kind === "fund" && entry.key === "intraday";
+                    return {
+                      key: entry.key,
+                      label: entry.label,
+                      title: disabled ? "基金按日披露净值，没有分时" : entry.hint,
+                      disabled,
+                    };
+                  })}
+                  value={activePeriod}
+                  onChange={(next) => setPeriod(next)}
+                  variant="underline"
+                  aria-label="时间周期"
+                  className="border-b-0 pb-0"
+                />
                 {history && (
                   <span className="ml-auto self-center text-[11px] text-slate-400">
                     来源：
@@ -515,9 +528,7 @@ export default function MarketBoard({
               {history && (
                 <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
                   {history.note}
-                  {history.updated_at
-                    ? ` · 抓取于 ${new Date(history.updated_at).toLocaleTimeString("zh-CN", { hour12: false })}`
-                    : ""}
+                  {history.updated_at ? ` · 抓取于北京时间 ${formatClock(history.updated_at)}` : ""}
                 </p>
               )}
 
@@ -529,7 +540,7 @@ export default function MarketBoard({
 
       <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
         <TrendingUp className="h-3.5 w-3.5" />
-        报价来自腾讯（A股/基金）与东方财富（美股/指数），K 线与分时来自东方财富公开接口；数据仅供参考，不构成投资建议。
+        报价来自腾讯（A股个股/基金）与东方财富（指数/美股），K 线与分时来自东方财富公开接口；数据仅供参考，不构成投资建议。
       </p>
     </div>
   );
@@ -542,7 +553,7 @@ function HistoryTable({
 }: {
   data: MarketHistory;
   currency: "CNY" | "USD";
-  kind: string;
+  kind: MarketQuoteItem["kind"];
 }) {
   const rows =
     data.series === "candle"

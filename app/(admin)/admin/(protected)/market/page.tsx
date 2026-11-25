@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import MarketManager from "@/components/admin/MarketManager";
 
 export const metadata: Metadata = {
-  title: "行情 · Kirameku Admin",
+  title: "行情 · 兴趣",
   robots: { index: false, follow: false },
 };
 

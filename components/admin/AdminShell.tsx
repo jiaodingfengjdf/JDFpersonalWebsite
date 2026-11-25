@@ -3,6 +3,7 @@ import AdminMobileNav from "./AdminMobileNav";
 import AdminNav from "./AdminNav";
 import { ConfirmProvider } from "./ConfirmProvider";
 import LogoutButton from "./LogoutButton";
+import { loadSiteSettings } from "@/server/modules/site-settings";
 
 interface AdminShellProps {
   admin: {
@@ -20,8 +21,11 @@ interface AdminShellProps {
  * 明暗两套外观都走同一棵 DOM：浅色是默认（毛玻璃 + 柔和背景光斑，与前台一致），
  * 暗色只在 `dark` 下接管。这样后台不再强制暗色调，跟随访问者在前台选的主题。
  */
-export default function AdminShell({ admin, children }: AdminShellProps) {
+export default async function AdminShell({ admin, children }: AdminShellProps) {
   const displayName = admin.nickname || admin.username;
+  // 品牌跟随站点标题；读不到配置时 loadSiteSettings 会回落到出厂值。
+  const { profile } = await loadSiteSettings();
+  const siteTitle = profile.siteTitle || "Kirameku";
 
   return (
     <ConfirmProvider>
@@ -39,7 +43,7 @@ export default function AdminShell({ admin, children }: AdminShellProps) {
             </span>
             <span>
               <span className="block text-sm font-semibold tracking-wide text-slate-900 dark:text-slate-100">
-                Kirameku
+                {siteTitle}
               </span>
               <span className="block text-[11px] text-slate-500 dark:text-slate-500">
                 Admin Console
@@ -53,7 +57,7 @@ export default function AdminShell({ admin, children }: AdminShellProps) {
         <div className="relative min-w-0">
           <header className="flex items-center justify-between border-b border-white/60 bg-white/40 px-5 py-4 backdrop-blur-xl dark:border-white/10 dark:bg-transparent lg:px-8">
             <div className="flex items-center gap-3">
-              <AdminMobileNav />
+              <AdminMobileNav siteTitle={siteTitle} />
               <div>
                 <p className="text-[10px] font-semibold tracking-[0.2em] text-slate-500 uppercase dark:text-slate-600">
                   Workspace

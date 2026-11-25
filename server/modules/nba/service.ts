@@ -68,12 +68,17 @@ export function createNbaService(db: AppDatabase) {
       return { days, games: count };
     },
 
-    async list(options: { followOnly?: boolean; days?: number } = {}): Promise<NbaGameView[]> {
+    async list(
+      options: { followOnly?: boolean; days?: number; teams?: NbaTeam[] } = {},
+    ): Promise<NbaGameView[]> {
       const days = options.days ?? 7;
-      const from = Date.now() - 2 * 24 * 60 * 60 * 1000;
+      // 与前台「近 3 天」及同步窗口 [今天-3, 今天+7] 对齐。
+      const from = Date.now() - 3 * 24 * 60 * 60 * 1000;
       const to = Date.now() + days * 24 * 60 * 60 * 1000;
 
-      const followed = (await teams()).filter((team) => team.follow).map((team) => team.code);
+      // 调用方（/api/nba）可以复用已读出的球队表，避免重复查库。
+      const teamRows = options.teams ?? (await teams());
+      const followed = teamRows.filter((team) => team.follow).map((team) => team.code);
       const followSet = new Set(followed);
 
       const rows = await db

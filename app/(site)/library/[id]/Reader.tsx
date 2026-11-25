@@ -2,13 +2,27 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import type { Book, Location, Rendition } from "epubjs";
+import { ArrowLeft, ChevronLeft, ChevronRight, List, Minus, Plus, X } from "lucide-react";
+import type { Book, Location, NavItem, Rendition } from "epubjs";
 import type { LibraryBookView } from "@/server/modules/library/contracts";
 import { splitChapters } from "@/lib/library-chapters";
 
 type Progress = NonNullable<LibraryBookView["progress"]>;
 const EMPTY_PROGRESS: Progress = { unit: 0, offset: 0, percent: 0, location: "" };
+
+interface TocEntry {
+  href: string;
+  label: string;
+  depth: number;
+}
+
+const FONT_KEY = "library-reader-font-size";
+const DEFAULT_FONT_SIZE = 18;
+const MIN_FONT_SIZE = 14;
+const MAX_FONT_SIZE = 28;
+const FONT_STEP = 2;
+/** Server writes are throttled; local storage is always written immediately. */
+const SERVER_FLUSH_MS = 5_000;
 
 function readProgress(key: string, fallback: Progress | null, allowLegacy: boolean): Progress {
   try {
@@ -29,6 +43,19 @@ function readProgress(key: string, fallback: Progress | null, allowLegacy: boole
   return fallback ?? EMPTY_PROGRESS;
 }
 
+function flattenNav(items: NavItem[], depth = 0): TocEntry[] {
+  const entries: TocEntry[] = [];
+  for (const item of items) {
+    if (!item || typeof item.href !== "string" || !item.href) continue;
+    const label = typeof item.label === "string" ? item.label.trim() : "";
+    entries.push({ href: item.href, label: label || "章节", depth });
+    if (Array.isArray(item.subitems) && item.subitems.length) {
+      entries.push(...flattenNav(item.subitems, depth + 1));
+    }
+  }
+  return entries.slice(0, 1000);
+}
+
 export default function Reader({ book, canPersist }: { book: LibraryBookView; canPersist: boolean }) {
   const [chapters, setChapters] = useState<string[]>([]);
   const [progress, setProgress] = useState(EMPTY_PROGRESS);
@@ -39,12 +66,64 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
   const [error, setError] = useState<string | null>(null);
   const [syncFailed, setSyncFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [toc, setToc] = useState<TocEntry[]>([]);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [fontSize, setFontSize] = useState<number>(() => {
+    // Per-device preference; read once during the client's first render.
+    if (typeof window === "undefined") return DEFAULT_FONT_SIZE;
+    try {
+      const value = Number(localStorage.getItem(FONT_KEY));
+      if (Number.isFinite(value) && value >= MIN_FONT_SIZE && value <= MAX_FONT_SIZE) return value;
+    } catch {
+      // Storage may be unavailable in private browsing.
+    }
+    return DEFAULT_FONT_SIZE;
+  });
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
-  const progressQueue = useRef(Promise.resolve());
+  const progressQueue = useRef<Promise<void>>(Promise.resolve());
   const latestProgress = useRef<Progress | null>(null);
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFlushAt = useRef(0);
   const textRef = useRef<HTMLElement>(null);
+  const fontSizeRef = useRef(fontSize);
   const progressKey = `library-progress-v2-${canPersist ? "owner" : "guest"}-${book.id}`;
+
+  /** Send the newest progress through the existing serial queue. */
+  const flushProgress = useCallback(() => {
+    if (flushTimer.current !== null) {
+      clearTimeout(flushTimer.current);
+      flushTimer.current = null;
+    }
+    lastFlushAt.current = Date.now();
+    const snapshot = latestProgress.current;
+    if (!snapshot) return;
+    progressQueue.current = progressQueue.current.then(async () => {
+      // Superseded while queued: the newer value has its own scheduled flush.
+      if (latestProgress.current !== snapshot) return;
+      try {
+        const response = await fetch(`/api/admin/library/${book.id}/progress`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(snapshot),
+          keepalive: true,
+          signal: AbortSignal.timeout(10_000),
+        });
+        setSyncFailed(!response.ok);
+      } catch {
+        setSyncFailed(true);
+      }
+    });
+  }, [book.id]);
+
+  const scheduleProgressFlush = useCallback(() => {
+    if (flushTimer.current !== null) return;
+    const remaining = Math.max(0, SERVER_FLUSH_MS - (Date.now() - lastFlushAt.current));
+    flushTimer.current = setTimeout(() => {
+      flushTimer.current = null;
+      flushProgress();
+    }, remaining);
+  }, [flushProgress]);
 
   const saveProgress = useCallback((next: Progress) => {
     try {
@@ -55,22 +134,39 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
     if (!canPersist) return;
 
     latestProgress.current = next;
-    progressQueue.current = progressQueue.current.then(async () => {
-      if (latestProgress.current !== next) return;
-      try {
-        const response = await fetch(`/api/admin/library/${book.id}/progress`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(next),
-          keepalive: true,
-          signal: AbortSignal.timeout(10_000),
-        });
-        setSyncFailed(!response.ok);
-      } catch {
-        setSyncFailed(true);
-      }
-    });
-  }, [book.id, canPersist, progressKey]);
+    scheduleProgressFlush();
+  }, [canPersist, progressKey, scheduleProgressFlush]);
+
+  // Final write on page turn / leaving, so the last position is never lost.
+  useEffect(() => {
+    const onPageHide = () => flushProgress();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushProgress();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      flushProgress();
+    };
+  }, [flushProgress]);
+
+  useEffect(() => {
+    fontSizeRef.current = fontSize;
+    renditionRef.current?.themes.fontSize(`${fontSize}px`);
+  }, [fontSize]);
+
+  function changeFont(delta: number) {
+    const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, fontSize + delta));
+    if (next === fontSize) return;
+    setFontSize(next);
+    try {
+      localStorage.setItem(FONT_KEY, String(next));
+    } catch {
+      // Ignore storage failures; font size still applies to this session.
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -92,6 +188,11 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
           const unit = Math.min(start.unit, parts.length - 1);
           setChapters(parts);
           setTotal(parts.length);
+          setToc(parts.map((part, index) => ({
+            href: String(index),
+            label: (part.split("\n").map((line) => line.trim()).find(Boolean) ?? `第 ${index + 1} 章`).slice(0, 80),
+            depth: 0,
+          })));
           setProgress({ ...EMPTY_PROGRESS, unit, percent: ((unit + 1) / parts.length) * 100 });
         } else {
           const [{ default: openEpub }, bytes] = await Promise.all([import("epubjs"), response.arrayBuffer()]);
@@ -104,11 +205,16 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
           if (!sections) throw new Error("EPUB 没有可阅读的章节。");
           setTotal(sections);
 
+          const nav = await epub.loaded.navigation.catch(() => null);
+          if (controller.signal.aborted) return;
+          setToc(nav ? flattenNav(nav.toc) : []);
+
           const rendition = epub.renderTo(viewerRef.current, {
             width: "100%", height: "100%", flow: "paginated", spread: "none", allowScriptedContent: false,
           });
           renditionRef.current = rendition;
           rendition.themes.default({ body: { padding: "0 8px", "line-height": "1.9" } });
+          rendition.themes.fontSize(`${fontSizeRef.current}px`);
           let initialLocation = true;
           rendition.on("relocated", (location: Location) => {
             if (controller.signal.aborted || !location.start) return;
@@ -149,6 +255,30 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
     };
   }, [attempt, book.file_url, book.format, book.progress, canPersist, progressKey, saveProgress]);
 
+  async function jumpTo(entry: TocEntry) {
+    setTocOpen(false);
+    if (book.format === "txt") {
+      const unit = Number(entry.href);
+      if (!Number.isSafeInteger(unit) || unit < 0 || unit >= total) return;
+      const next = { ...EMPTY_PROGRESS, unit, percent: ((unit + 1) / total) * 100 };
+      setProgress(next);
+      textRef.current?.scrollTo(0, 0);
+      saveProgress(next);
+      flushProgress();
+      return;
+    }
+    if (loading || turning) return;
+    setTurning(true);
+    try {
+      await renditionRef.current?.display(entry.href);
+      flushProgress();
+    } catch {
+      setError("无法跳转到该章节。");
+    } finally {
+      setTurning(false);
+    }
+  }
+
   async function go(delta: -1 | 1) {
     if (loading || turning) return;
     if (book.format === "txt") {
@@ -158,6 +288,7 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
       setProgress(next);
       textRef.current?.scrollTo(0, 0);
       saveProgress(next);
+      flushProgress();
       return;
     }
 
@@ -165,6 +296,7 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
     try {
       if (delta > 0) await renditionRef.current?.next();
       else await renditionRef.current?.prev();
+      flushProgress();
     } catch {
       setError("无法翻页，请重新加载书籍。");
     } finally {
@@ -199,13 +331,24 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
       {loading && <p role="status" className="py-4 text-center text-sm text-slate-600 dark:text-slate-300">正在加载书籍…</p>}
       {syncFailed && <p role="status" className="mb-3 text-sm text-amber-800 dark:text-amber-200">
         同步失败，可在当前浏览器继续阅读。{" "}
-        <button type="button" className="underline" onClick={() => saveProgress(progress)}>重试同步</button>
+        <button type="button" className="underline" onClick={() => {
+          if (!canPersist) return;
+          latestProgress.current = progress;
+          flushProgress();
+        }}>重试同步</button>
       </p>}
 
       {epub ? (
         <div ref={viewerRef} className="h-[65dvh] min-h-64 overflow-hidden rounded-2xl border border-white/40 bg-white p-2 text-slate-900 sm:p-4" />
       ) : !loading && !error && (
-        <article ref={textRef} tabIndex={0} aria-label="章节正文" className="max-h-[65dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl border border-white/40 bg-white/80 p-5 text-[15px] leading-8 text-slate-800 [user-select:text] dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-100">
+        <article
+          ref={textRef}
+          tabIndex={0}
+          aria-label="章节正文"
+          suppressHydrationWarning
+          style={{ fontSize: `${fontSize}px` }}
+          className="max-h-[65dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl border border-white/40 bg-white/80 p-5 leading-8 text-slate-800 [user-select:text] dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-100"
+        >
           {chapters[progress.unit]}
         </article>
       )}
@@ -221,6 +364,77 @@ export default function Reader({ book, canPersist }: { book: LibraryBookView; ca
           {epub ? "下一页" : "下一章"} <ChevronRight className="size-4" />
         </button>
       </div>
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <button type="button" className={controlClass} onClick={() => setTocOpen(true)} disabled={loading || Boolean(error)}>
+          <List className="size-4" /> 目录
+        </button>
+        <div className="flex items-center gap-1">
+          <span className="mr-1 text-xs text-slate-600 dark:text-slate-300">字号</span>
+          <button
+            type="button"
+            className={controlClass}
+            onClick={() => changeFont(-FONT_STEP)}
+            disabled={fontSize <= MIN_FONT_SIZE}
+            aria-label="减小字号"
+          >
+            <Minus className="size-4" />
+          </button>
+          <span suppressHydrationWarning className="w-7 text-center text-xs tabular-nums text-slate-600 dark:text-slate-300">{fontSize}</span>
+          <button
+            type="button"
+            className={controlClass}
+            onClick={() => changeFont(FONT_STEP)}
+            disabled={fontSize >= MAX_FONT_SIZE}
+            aria-label="增大字号"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      {tocOpen && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-slate-950/40"
+          onClick={() => setTocOpen(false)}
+          role="presentation"
+        >
+          <aside
+            className="h-full w-[min(22rem,85vw)] overflow-y-auto bg-white p-4 shadow-xl dark:bg-slate-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-800 dark:text-slate-100">目录</h2>
+              <button
+                type="button"
+                className="rounded p-1 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                onClick={() => setTocOpen(false)}
+                aria-label="关闭目录"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            {toc.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">这本书没有目录。</p>
+            ) : (
+              <nav className="space-y-1">
+                {toc.map((entry, index) => (
+                  <button
+                    key={`${entry.href}-${index}`}
+                    type="button"
+                    onClick={() => void jumpTo(entry)}
+                    className="block w-full truncate rounded px-2 py-2 text-left text-sm text-slate-700 hover:bg-sky-50 hover:text-sky-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    style={{ paddingLeft: `${0.5 + entry.depth * 0.75}rem` }}
+                    title={entry.label}
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+              </nav>
+            )}
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

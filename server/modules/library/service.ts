@@ -89,6 +89,17 @@ export function createLibraryService(db: AppDatabase) {
       return { ok: true };
     },
 
+    /** Update only the cover, leaving the rest of the book untouched. */
+    async setCover(id: number, cover: string) {
+      const [row] = await db
+        .update(libraryBook)
+        .set({ cover, updatedAt: new Date() })
+        .where(eq(libraryBook.id, id))
+        .returning({ id: libraryBook.id });
+      if (!row) throw errors.notFound("书不存在");
+      return { ok: true };
+    },
+
     async remove(id: number) {
       await db.delete(libraryBook).where(eq(libraryBook.id, id));
       return { ok: true };

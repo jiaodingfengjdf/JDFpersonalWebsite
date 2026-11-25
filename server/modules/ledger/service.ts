@@ -4,6 +4,7 @@ import { ledgerAccount, ledgerBudget, ledgerCategory, ledgerTxn } from "@/server
 import { errors } from "@/server/http/errors";
 import { ledgerDate, parseLedgerDate } from "@/lib/ledger-date";
 import type {
+  AccountInput,
   LedgerAccount,
   LedgerCategory,
   LedgerSummary,
@@ -36,12 +37,90 @@ function parseTags(value: string | null): string[] {
   }
 }
 
-export function createLedgerService(db: AppDatabase) {
+interface TransactionRow {
+  id: number;
+  accountId: number;
+  accountName: string;
+  categoryId: number | null;
+  categoryName: string | null;
+  kind: string;
+  amount: number;
+  occurredAt: number;
+  merchant: string;
+  note: string;
+  tags: string | null;
+  externalId: string | null;
+}
+
+function toTransaction(row: TransactionRow): LedgerTransaction {
   return {
-    async accounts(): Promise<LedgerAccount[]> {
+    id: row.id,
+    account_id: row.accountId,
+    account_name: row.accountName,
+    category_id: row.categoryId,
+    category_name: row.categoryName ?? "",
+    kind: row.kind as LedgerTransaction["kind"],
+    amount: row.amount,
+    occurred_at: row.occurredAt,
+    merchant: row.merchant,
+    note: row.note,
+    tags: parseTags(row.tags),
+    external_id: row.externalId,
+  };
+}
+
+export function createLedgerService(db: AppDatabase) {
+  /** 按主键回查流水，带账户名与分类名；不依赖发生时间排序。 */
+  /** 创建与编辑共用：账户必须存在，分类必须与收支类型一致，否则返回 422 而不是外键 500。 */
+  async function assertTransactionRefs(input: TransactionInput): Promise<void> {
+    const [account] = await db
+      .select({ id: ledgerAccount.id })
+      .from(ledgerAccount)
+      .where(eq(ledgerAccount.id, input.account_id))
+      .limit(1);
+    if (!account) throw errors.validation("账户不存在");
+    if (input.category_id !== null) {
+      const [category] = await db
+        .select({ kind: ledgerCategory.kind })
+        .from(ledgerCategory)
+        .where(eq(ledgerCategory.id, input.category_id))
+        .limit(1);
+      if (!category || category.kind !== input.kind) {
+        throw errors.validation("分类不存在或与收支类型不匹配");
+      }
+    }
+  }
+
+  async function findTransaction(id: number): Promise<LedgerTransaction | null> {
+    const [row] = await db
+      .select({
+        id: ledgerTxn.id,
+        accountId: ledgerTxn.accountId,
+        accountName: ledgerAccount.name,
+        categoryId: ledgerTxn.categoryId,
+        categoryName: ledgerCategory.name,
+        kind: ledgerTxn.kind,
+        amount: ledgerTxn.amount,
+        occurredAt: ledgerTxn.occurredAt,
+        merchant: ledgerTxn.merchant,
+        note: ledgerTxn.note,
+        tags: ledgerTxn.tags,
+        externalId: ledgerTxn.externalId,
+      })
+      .from(ledgerTxn)
+      .innerJoin(ledgerAccount, eq(ledgerAccount.id, ledgerTxn.accountId))
+      .leftJoin(ledgerCategory, eq(ledgerCategory.id, ledgerTxn.categoryId))
+      .where(eq(ledgerTxn.id, id))
+      .limit(1);
+    return row ? toTransaction(row) : null;
+  }
+
+  return {
+    async accounts(options: { includeArchived?: boolean } = {}): Promise<LedgerAccount[]> {
       const rows = await db
         .select()
         .from(ledgerAccount)
+        .where(options.includeArchived ? undefined : eq(ledgerAccount.archived, 0))
         .orderBy(asc(ledgerAccount.sort), asc(ledgerAccount.id));
 
       const sums = await db
@@ -64,17 +143,14 @@ export function createLedgerService(db: AppDatabase) {
         name: row.name,
         kind: row.kind,
         initial_balance: row.initialBalance,
+        currency: row.currency as LedgerAccount["currency"],
         balance: round2(row.initialBalance + (delta.get(row.id) ?? 0)),
+        archived: row.archived,
         sort: row.sort,
       }));
     },
 
-    async createAccount(input: {
-      name: string;
-      kind: string;
-      initial_balance: number;
-      sort: number;
-    }): Promise<LedgerAccount> {
+    async createAccount(input: AccountInput): Promise<LedgerAccount> {
       const now = new Date();
       const [row] = await db
         .insert(ledgerAccount)
@@ -82,16 +158,43 @@ export function createLedgerService(db: AppDatabase) {
           name: input.name,
           kind: input.kind,
           initialBalance: input.initial_balance,
+          currency: input.currency,
           sort: input.sort,
+          archived: 0,
           createdAt: now,
           updatedAt: now,
         })
         .returning({ id: ledgerAccount.id });
       if (!row) throw errors.internal("创建账户失败");
-      const all = await this.accounts();
+      const all = await this.accounts({ includeArchived: true });
       const created = all.find((item) => item.id === row.id);
       if (!created) throw errors.internal("创建账户失败");
       return created;
+    },
+
+    async updateAccount(id: number, input: AccountInput): Promise<LedgerAccount> {
+      const existing = await db
+        .select({ id: ledgerAccount.id })
+        .from(ledgerAccount)
+        .where(eq(ledgerAccount.id, id))
+        .limit(1);
+      if (existing.length === 0) throw errors.notFound("账户不存在");
+      await db
+        .update(ledgerAccount)
+        .set({
+          name: input.name,
+          kind: input.kind,
+          initialBalance: input.initial_balance,
+          currency: input.currency,
+          sort: input.sort,
+          updatedAt: new Date(),
+        })
+        .where(eq(ledgerAccount.id, id));
+      const updated = (await this.accounts({ includeArchived: true })).find(
+        (item) => item.id === id,
+      );
+      if (!updated) throw errors.internal("更新账户失败");
+      return updated;
     },
 
     async categories(): Promise<LedgerCategory[]> {
@@ -182,25 +285,13 @@ export function createLedgerService(db: AppDatabase) {
         .where(where);
 
       return {
-        items: rows.map((row) => ({
-          id: row.id,
-          account_id: row.accountId,
-          account_name: row.accountName,
-          category_id: row.categoryId,
-          category_name: row.categoryName ?? "",
-          kind: row.kind as LedgerTransaction["kind"],
-          amount: row.amount,
-          occurred_at: row.occurredAt,
-          merchant: row.merchant,
-          note: row.note,
-          tags: parseTags(row.tags),
-          external_id: row.externalId,
-        })),
+        items: rows.map(toTransaction),
         total: countRow?.value ?? rows.length,
       };
     },
 
     async createTransaction(input: TransactionInput): Promise<LedgerTransaction> {
+      await assertTransactionRefs(input);
       const now = new Date();
       const [row] = await db
         .insert(ledgerTxn)
@@ -219,8 +310,7 @@ export function createLedgerService(db: AppDatabase) {
         })
         .returning({ id: ledgerTxn.id });
       if (!row) throw errors.internal("保存流水失败");
-      const { items } = await this.transactions({ limit: 1, offset: 0, q: undefined });
-      const created = items.find((item) => item.id === row.id);
+      const created = await findTransaction(row.id);
       return (
         created ?? {
           id: row.id,
@@ -237,6 +327,27 @@ export function createLedgerService(db: AppDatabase) {
           external_id: input.external_id ?? null,
         }
       );
+    },
+
+    async updateTransaction(id: number, input: TransactionInput): Promise<LedgerTransaction> {
+      if (!(await findTransaction(id))) throw errors.notFound("流水不存在");
+      await assertTransactionRefs(input);
+      await db
+        .update(ledgerTxn)
+        .set({
+          accountId: input.account_id,
+          categoryId: input.category_id,
+          kind: input.kind,
+          amount: round2(input.amount),
+          occurredAt: input.occurred_at,
+          merchant: input.merchant,
+          note: input.note,
+          updatedAt: new Date(),
+        })
+        .where(eq(ledgerTxn.id, id));
+      const updated = await findTransaction(id);
+      if (!updated) throw errors.internal("更新流水失败");
+      return updated;
     },
 
     async removeTransaction(id: number): Promise<void> {

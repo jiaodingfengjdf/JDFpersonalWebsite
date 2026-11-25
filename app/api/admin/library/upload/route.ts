@@ -5,9 +5,16 @@ import { errors } from "@/server/http/errors";
 import { handle } from "@/server/http/handler";
 import { assertSameOrigin } from "@/server/http/origin";
 import { assertWritable } from "@/server/http/write-guard";
-import { getLibraryService } from "@/server/modules/library";
+import { getLibraryService, isSafeCoverUrl } from "@/server/modules/library";
 import { getUploadRoot } from "@/server/storage";
-import { removeBookUpload, writeBookUpload } from "@/server/storage/books";
+import {
+  inspectCover,
+  MAX_COVER_BYTES,
+  removeBookUpload,
+  removeCoverUpload,
+  writeBookUpload,
+  writeCoverUpload,
+} from "@/server/storage/books";
 import { splitChapters } from "@/lib/library-chapters";
 
 export const runtime = "nodejs";
@@ -27,8 +34,8 @@ export async function POST(request: Request) {
       await requireAdmin();
 
       const declared = Number(request.headers.get("content-length"));
-      if (Number.isFinite(declared) && declared > MAX_BYTES + 64 * 1024) {
-        throw errors.payloadTooLarge("书籍文件不能超过 50MB");
+      if (Number.isFinite(declared) && declared > MAX_BYTES + MAX_COVER_BYTES + 256 * 1024) {
+        throw errors.payloadTooLarge("书籍文件不能超过 50MB，封面不能超过 5MB");
       }
 
       let form: FormData;
@@ -68,14 +75,37 @@ export async function POST(request: Request) {
         throw errors.badRequest("无法识别 EPUB 文件");
       }
       const root = getUploadRoot();
+
+      // A cover may arrive as a file (validated and stored here) or as a URL
+      // selected from an existing upload. Both end up as a safe /uploads path.
+      let cover = "";
+      let coverWritten = false;
+      const coverInput = form.get("cover");
+      if (coverInput instanceof File && coverInput.size > 0) {
+        if (coverInput.size > MAX_COVER_BYTES) {
+          throw errors.payloadTooLarge("封面图片不能超过 5MB");
+        }
+        const coverBuffer = Buffer.from(await coverInput.arrayBuffer());
+        const image = inspectCover(coverBuffer, coverInput.type);
+        const coverFilename = `${randomUUID()}.${image.ext}`;
+        await writeCoverUpload(root, coverFilename, coverBuffer);
+        cover = `/uploads/covers/${coverFilename}`;
+        coverWritten = true;
+      } else if (typeof coverInput === "string" && coverInput.trim()) {
+        cover = coverInput.trim();
+        if (cover.length > 1000 || !isSafeCoverUrl(cover)) {
+          throw errors.badRequest("封面地址无效");
+        }
+      }
+
       const filename = `${randomUUID()}${ext}`;
       const fileUrl = `/uploads/books/${filename}`;
 
       const titleFromName = file.name.replace(/\.[^.]+$/, "").trim() || "未命名";
       const authorInput = form.get("author");
       const author = typeof authorInput === "string" ? authorInput.trim().slice(0, 100) : "";
-      await writeBookUpload(root, filename, buffer);
       try {
+        await writeBookUpload(root, filename, buffer);
         const created = await getLibraryService().create({
           title: titleFromName.slice(0, 200),
           author,
@@ -83,11 +113,14 @@ export async function POST(request: Request) {
           fileUrl,
           bytes: buffer.length,
           totalUnits,
-          cover: "",
+          cover,
         });
         return { ...created, format, bytes: buffer.length, totalUnits };
       } catch (error) {
         await removeBookUpload(root, fileUrl).catch((reason) => console.error("Failed to clean up book upload", reason));
+        if (coverWritten) {
+          await removeCoverUpload(root, cover).catch((reason) => console.error("Failed to clean up cover upload", reason));
+        }
         throw error;
       }
     },

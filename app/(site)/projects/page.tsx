@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/page-metadata";
 import { getProjectsService } from "@/server/modules/projects";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import ProjectsClient from "./ProjectsClient";
@@ -8,10 +9,11 @@ export const revalidate = 60;
 export async function generateMetadata(): Promise<Metadata> {
   const { profile } = await loadSiteSettings();
 
-  return {
+  return buildPageMetadata({
     title: `项目 · ${profile.siteTitle}`,
     description: "从零到一，用代码构建的每一份作品",
-  };
+    path: "/projects",
+  });
 }
 
 export default async function ProjectsPage() {

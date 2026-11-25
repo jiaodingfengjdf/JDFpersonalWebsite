@@ -48,11 +48,14 @@ export default function SearchClient({
         </Link>
       </div>
 
-      <h1 className="mb-1 text-xl font-bold text-slate-800 dark:text-white md:text-2xl">
+      <h1 className="mb-1 text-xl font-bold text-slate-800 dark:text-white md:text-3xl">
         站内搜索
       </h1>
-      <p className="mb-6 break-words text-sm text-slate-600 dark:text-slate-300" role="status">
-        {initialQuery ? `「${initialQuery}」的搜索结果` : "搜索文章、说说、收藏、书架、影视、游戏、新闻与播客。"}
+      <p
+        role={initialQuery ? "status" : undefined}
+        className="mb-6 break-words text-sm text-slate-600 dark:text-slate-300"
+      >
+        {initialQuery ? `「${initialQuery}」的搜索结果` : "搜索文章、说说、收藏、书架、影视、游戏、新闻、播客、行情与 NBA。"}
       </p>
 
       <form
@@ -102,13 +105,34 @@ export default function SearchClient({
       </form>
 
       {incomplete && (
-        <p role="alert" className="mb-5 rounded-xl bg-amber-100 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">
-          部分搜索结果暂时无法加载。请重新搜索。
-        </p>
+        <div role="alert" className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-amber-100 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">
+          <span>部分搜索结果暂时无法加载。</span>
+          <button
+            type="button"
+            onClick={() => submit(initialQuery)}
+            className="rounded-lg bg-amber-950/10 px-2 py-1 text-xs font-medium hover:bg-amber-950/20 dark:bg-amber-100/10 dark:hover:bg-amber-100/20"
+          >
+            重试
+          </button>
+        </div>
       )}
+
+      {!initialQuery && (
+        <section className="mb-7 rounded-2xl border border-dashed border-indigo-200/80 bg-white/60 p-5 backdrop-blur dark:border-white/10 dark:bg-slate-800/50">
+          <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">可搜索范围</h2>
+          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+            文章与说说，以及收藏、书架、影视、游戏、新闻、播客、行情自选与 NBA 球队/比赛里的条目。输入关键词后按回车即可查找。
+          </p>
+        </section>
+      )}
+
       {result.hits.length > 0 && (
         <section className="mb-7">
-        <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">文章 · {result.total} 篇</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          文章 · {result.total > result.hits.length
+            ? `共 ${result.total} 篇，展示前 ${result.hits.length} 篇`
+            : `共 ${result.total} 篇`}
+        </h2>
         <ul className="space-y-3">
           {result.hits.map((hit) => (
             <li key={hit.id}>
@@ -148,14 +172,29 @@ export default function SearchClient({
         <section key={group.kind} className="mb-7">
           <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{group.label}</h2>
           <ul className="divide-y divide-slate-200/70 rounded-2xl border border-slate-200/70 bg-white/70 backdrop-blur dark:divide-white/10 dark:border-white/10 dark:bg-slate-800/60">
-            {group.items.map((hit) => (
-              <li key={hit.id}>
-                <Link href={hit.href} className="block rounded-xl px-4 py-3 hover:bg-indigo-500/10 focus-visible:outline-2 focus-visible:outline-indigo-500">
+            {group.items.map((hit) => {
+              const isExternal = /^https?:\/\//i.test(hit.href);
+              const className = "block rounded-xl px-4 py-3 hover:bg-indigo-500/10 focus-visible:outline-2 focus-visible:outline-indigo-500";
+              const body = (
+                <>
                   <h3 className="break-words text-sm font-medium text-slate-800 dark:text-slate-100">{hit.title}</h3>
                   {hit.detail && <p className="mt-1 line-clamp-2 break-words text-xs text-slate-600 dark:text-slate-300">{hit.detail}</p>}
-                </Link>
-              </li>
-            ))}
+                </>
+              );
+              return (
+                <li key={`${group.kind}-${hit.id}`}>
+                  {isExternal ? (
+                    <a href={hit.href} target="_blank" rel="noopener noreferrer" className={className}>
+                      {body}
+                    </a>
+                  ) : (
+                    <Link href={hit.href} className={className}>
+                      {body}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
@@ -167,7 +206,7 @@ export default function SearchClient({
           </p>
           {result.fuzzy && (
             <p className="mt-2 text-xs text-slate-400">
-              试试更长的关键词（三个字以上可以走全文索引，结果更准）。
+              换个更长一点的关键词试试，三个字以上搜得更准。
             </p>
           )}
         </div>

@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   return handle(async () => {
     await requireAdmin();
-    return getLedgerService().accounts();
+    // 后台账户列表默认显示全部（含归档）；传 includeArchived=0 只看在用的。
+    const includeArchived =
+      new URL(request.url).searchParams.get("includeArchived") !== "0";
+    return getLedgerService().accounts({ includeArchived });
   }, { request });
 }
 

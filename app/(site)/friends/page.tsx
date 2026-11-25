@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/page-metadata";
 import { getFriendLinksService } from "@/server/modules/friend-links";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import FriendsClient from "./FriendsClient";
@@ -8,10 +9,11 @@ export const revalidate = 300;
 export async function generateMetadata(): Promise<Metadata> {
   const { profile } = await loadSiteSettings();
 
-  return {
+  return buildPageMetadata({
     title: `友链 · ${profile.siteTitle}`,
     description: "漂流瓶里的朋友们",
-  };
+    path: "/friends",
+  });
 }
 
 export default async function FriendsPage() {

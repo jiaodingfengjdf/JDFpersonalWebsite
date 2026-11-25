@@ -34,8 +34,11 @@ export const accountInput = z.object({
   name: z.string().trim().min(1).max(40),
   kind: z.enum(["cash", "wechat", "alipay", "bank", "fund", "other"]).default("cash"),
   initial_balance: z.coerce.number().min(-1_000_000_000).max(1_000_000_000).default(0),
+  currency: z.enum(["CNY", "USD"]).default("CNY"),
   sort: z.coerce.number().int().min(0).max(9999).default(0),
 });
+
+export type AccountInput = z.infer<typeof accountInput>;
 
 export const categoryInput = z.object({
   name: z.string().trim().min(1).max(30),
@@ -59,7 +62,9 @@ export interface LedgerAccount {
   name: string;
   kind: string;
   initial_balance: number;
+  currency: "CNY" | "USD";
   balance: number;
+  archived: number;
   sort: number;
 }
 

@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   Trash2,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import {
   type NavDropdownIconName,
 } from "@/lib/nav-dropdown";
 import { navDropdownIcons } from "@/lib/nav-dropdown-icons";
+import { defaultInterestDropdownConfig } from "@/lib/interest-modules";
 import { cn } from "@/lib/utils";
 
 interface DraftLink {
@@ -92,7 +94,7 @@ export default function NavDropdownManager() {
         <AdminPageHeader
           eyebrow="Navigation"
           title="导航菜单"
-          description="给前台导航栏加一个可展开的下拉菜单。"
+          description="维护前台『兴趣』栏目的入口。"
         />
         <p className="py-16 text-center text-sm text-slate-500">正在加载配置…</p>
       </div>
@@ -105,7 +107,7 @@ export default function NavDropdownManager() {
         <AdminPageHeader
           eyebrow="Navigation"
           title="导航菜单"
-          description="给前台导航栏加一个可展开的下拉菜单。"
+          description="维护前台『兴趣』栏目的入口。"
           actions={
             <Button variant="outline" onClick={reload}>
               <RefreshCw className="size-4" aria-hidden />
@@ -232,6 +234,31 @@ function NavDropdownEditor({
     }
   }
 
+  async function restoreDefault() {
+    if (dirty && !(await confirm("恢复默认会丢弃未保存的修改，确定继续？"))) {
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const restored = await adminRequest<NavDropdownConfig>(
+        "/api/admin/nav-dropdown",
+        {
+          method: "PUT",
+          body: JSON.stringify(defaultInterestDropdownConfig()),
+        },
+      );
+      setDraft(toDraft(restored));
+      setDirty(false);
+      setSaved(true);
+    } catch (reason) {
+      setSaveError(describeAdminError(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const PreviewIcon = navDropdownIcons[draft.icon];
   const externalCount = draft.links.filter((link) => isExternalHref(link.href)).length;
 
@@ -240,12 +267,16 @@ function NavDropdownEditor({
       <AdminPageHeader
         eyebrow="Navigation"
         title="导航菜单"
-        description="给前台导航栏加一个可展开的下拉菜单，把站外或零散的页面收进去。保存后刷新前台即可看到。"
+        description="维护前台『兴趣』栏目的入口。保存后刷新前台即可看到。"
         actions={
           <>
             <Button variant="outline" onClick={reload}>
               <RefreshCw className="size-4" aria-hidden />
               重新载入
+            </Button>
+            <Button variant="outline" onClick={restoreDefault} disabled={saving}>
+              <RotateCcw className="size-4" aria-hidden />
+              恢复默认兴趣菜单
             </Button>
             <Button onClick={save} disabled={saving}>
               <Save className="size-4" aria-hidden />
@@ -462,11 +493,13 @@ function NavDropdownEditor({
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-950/60 p-4">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-100/80 dark:bg-slate-950/60 p-4">
               <div
                 className={cn(
                   "flex w-fit items-center gap-1.5 rounded-lg px-3 py-2 text-sm",
-                  draft.enabled ? "text-slate-800 dark:text-slate-100" : "text-slate-600",
+                  draft.enabled
+                    ? "text-slate-800 dark:text-slate-100"
+                    : "text-slate-600 dark:text-slate-400",
                 )}
               >
                 <PreviewIcon className="size-4" aria-hidden />
@@ -474,9 +507,9 @@ function NavDropdownEditor({
                 <ChevronDown className="size-3.5" aria-hidden />
               </div>
 
-              <div className="mt-2 w-56 rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-900/90 p-2">
+              <div className="mt-2 w-56 rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white/90 p-2 dark:bg-slate-900/90">
                 {draft.links.length === 0 ? (
-                  <p className="px-3 py-2 text-[11px] text-slate-600">
+                  <p className="px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400">
                     菜单里还没有条目
                   </p>
                 ) : (
@@ -498,7 +531,7 @@ function NavDropdownEditor({
                           ) : null}
                         </span>
                         {link.description.trim() ? (
-                          <span className="block truncate text-[10px] text-slate-500">
+                          <span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">
                             {link.description.trim()}
                           </span>
                         ) : null}

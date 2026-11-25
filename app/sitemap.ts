@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { INTEREST_MODULES } from "@/lib/interest-modules";
 import { getSiteUrl } from "@/server/site";
 import { getPostsService } from "@/server/modules/posts";
 
@@ -23,6 +24,13 @@ const STATIC_ROUTES: Array<{
   { path: "/photowall", changeFrequency: "monthly", priority: 0.7 },
   { path: "/timeline", changeFrequency: "monthly", priority: 0.7 },
   { path: "/music", changeFrequency: "monthly", priority: 0.5 },
+  // 兴趣模块从单一事实来源派生：indexable=false 的 /ledger（私密）
+  // 与 /search（查询页）自动排除，其余 8 页全部进入 sitemap。
+  ...INTEREST_MODULES.filter((module) => module.indexable).map((module) => ({
+    path: module.href,
+    changeFrequency: "weekly" as const,
+    priority: 0.7,
+  })),
   // /garden 需要密码才能进入，未解锁时服务端渲染的是空壳。
   // 收录它等于给爬虫一个永远空白的页面，所以不进 sitemap。
 ];

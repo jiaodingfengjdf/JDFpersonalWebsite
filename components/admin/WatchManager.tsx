@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import type { WatchItemView } from "@/server/modules/watch/contracts";
 
 const STATUS: Array<{ value: string; label: string }> = [
@@ -109,9 +110,9 @@ export default function WatchManager() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        eyebrow="生活"
+        eyebrow="兴趣"
         title="影视"
-        description="记录想看 / 在看 / 看完的影视与动画；前台 /watch 按状态筛选。"
+        description="记录想看 / 在看 / 看完 / 弃了的影视与动画；前台 /watch 按状态筛选。"
         actions={
           <Button variant="outline" size="sm" onClick={() => void load()}>
             <RefreshCw className="mr-1 h-4 w-4" />
@@ -137,15 +138,14 @@ export default function WatchManager() {
           </div>
           <div className="space-y-1">
             <Label>类型</Label>
-            <select
+            <Select
               value={form.kind}
               onChange={(event) => setForm((prev) => ({ ...prev, kind: event.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
               <option value="movie">电影</option>
               <option value="tv">剧集</option>
               <option value="anime">动画</option>
-            </select>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label>年份</Label>
@@ -158,17 +158,16 @@ export default function WatchManager() {
           </div>
           <div className="space-y-1">
             <Label>状态</Label>
-            <select
+            <Select
               value={form.status}
               onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
               {STATUS.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label>进度（可选）</Label>
@@ -180,17 +179,16 @@ export default function WatchManager() {
           </div>
           <div className="space-y-1">
             <Label>评分</Label>
-            <select
+            <Select
               value={form.rating}
               onChange={(event) => setForm((prev) => ({ ...prev, rating: event.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
               {[0, 1, 2, 3, 4, 5].map((value) => (
                 <option key={value} value={value}>
                   {value === 0 ? "未评分" : `${value} 星`}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1 md:col-span-2">
             <Label>短评（可选）</Label>
@@ -217,12 +215,12 @@ export default function WatchManager() {
         </div>
       </Card>
 
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {loading && <p className="text-sm text-slate-500 dark:text-slate-400">加载中…</p>}
 
       <div className="space-y-2">
         {items.map((item) => (
           <Card key={item.id} className="flex flex-wrap items-center gap-3 p-3">
-            <div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-muted">
+            <div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-slate-200/60 dark:bg-slate-700/60">
               {item.poster ? (
                 // eslint-disable-next-line @next/next/no-img-element -- 海报来自上传或外链
                 <img src={item.poster} alt="" className="h-full w-full object-cover" />
@@ -230,23 +228,23 @@ export default function WatchManager() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{item.title}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {[item.year, item.kind, item.progress, item.rating > 0 ? `${item.rating}★` : ""]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
             </div>
-            <select
+            <Select
               value={item.status}
               onChange={(event) => void patch(item, { status: event.target.value })}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-9 w-auto"
             >
               {STATUS.map((status) => (
                 <option key={status.value} value={status.value}>
                   {status.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button variant="ghost" size="sm" onClick={() => void remove(item)}>
               <Trash2 className="h-4 w-4" />
             </Button>

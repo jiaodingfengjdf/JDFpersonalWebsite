@@ -22,6 +22,7 @@ import {
   intradayTrends,
   quotesBySecids,
   resolveUsSecid,
+  type EmQuote,
 } from "./eastmoney";
 import { aggregateCandles, aggregateNav, SERIES_LIMIT, takeLast, toCandle } from "./series";
 
@@ -47,6 +48,49 @@ function watchSecid(watch: WatchRow): string {
   if (watch.secid) return watch.secid;
   if (watch.market === "us") return "";
   return cnSecid(watch.kind, watch.code);
+}
+
+/**
+ * 所有指数（全局条 + 自选里 kind=index 的 A 股/美股指数）只走东财批量报价。
+ * 快照按当前 secid 集合缓存：overview 与 indices 命中同一键时拿到同一份 Map，
+ * 顶部指数条与自选列表里的同一指数因此不会出现两个价格或两套 stale 标记。
+ */
+const INDEX_SNAPSHOT_TTL = 45_000;
+
+type IndexQuotes = { quotes: Map<string, EmQuote>; stale: boolean };
+
+let indexSnapshot: (IndexQuotes & { key: string; at: number }) | null = null;
+let indexPending: { key: string; promise: Promise<IndexQuotes> } | null = null;
+
+async function loadIndexQuotes(watches: WatchRow[]): Promise<IndexQuotes> {
+  const secids = [
+    ...new Set([
+      ...GLOBAL_INDICES.map((item) => item.secid),
+      ...watches
+        .filter((watch) => watch.kind === "index")
+        .map(watchSecid)
+        .filter((secid) => secid.length > 0),
+    ]),
+  ].sort();
+  const key = secids.join(",");
+  const now = Date.now();
+  if (indexSnapshot && indexSnapshot.key === key && now - indexSnapshot.at <= INDEX_SNAPSHOT_TTL) {
+    return { quotes: indexSnapshot.quotes, stale: indexSnapshot.stale };
+  }
+  // overview() 与 indices() 在页面里是并行的，必须连 in-flight 请求也合并。
+  if (indexPending && indexPending.key === key) return indexPending.promise;
+
+  const promise = (async () => {
+    const result = await quotesBySecids(secids);
+    indexSnapshot = { ...result, key, at: Date.now() };
+    return result;
+  })();
+  indexPending = { key, promise };
+  try {
+    return await promise;
+  } finally {
+    if (indexPending?.promise === promise) indexPending = null;
+  }
 }
 
 export function createMarketService(db: AppDatabase) {
@@ -109,6 +153,7 @@ export function createMarketService(db: AppDatabase) {
       time: live?.time || (snapshot ? dateTime.format(snapshot.capturedAt) : ""),
       stale: live ? live.stale : true,
       currency,
+      sort: watch.sort,
       cost,
       shares,
       market_value: hasHolding && price > 0 ? round2(price * shares) : null,
@@ -143,18 +188,44 @@ export function createMarketService(db: AppDatabase) {
       const watches = await listWatches();
       if (watches.length === 0) return [];
 
-      const cnWatches = watches.filter((watch) => watch.market !== "us");
-      const usWatches = watches.filter((watch) => watch.market === "us");
+      // 指数统一走东财，与 GLOBAL_INDICES 合并成一批；腾讯只取 A 股个股与基金。
+      const indexWatches = watches.filter((watch) => watch.kind === "index");
+      const cnWatches = watches.filter(
+        (watch) => watch.market !== "us" && watch.kind !== "index",
+      );
+      const usWatches = watches.filter(
+        (watch) => watch.market === "us" && watch.kind !== "index",
+      );
       const usSecids = usWatches.map(watchSecid).filter((secid) => secid.length > 0);
 
-      const [cnQuotes, usResult] = await Promise.all([
+      const [cnQuotes, indexResult, usResult] = await Promise.all([
         getQuotes(cnWatches.map((watch) => ({ kind: watch.kind as MarketKind, code: watch.code }))),
+        loadIndexQuotes(indexWatches),
         quotesBySecids(usSecids),
       ]);
 
       const record = options.record === true;
       const build = () =>
         watches.map((watch): MarketQuoteItem => {
+          // 指数优先：美股指数也必须走东财，不能被后下的美股分支截走。
+          if (watch.kind === "index") {
+            const hit = indexResult.quotes.get(watchSecid(watch));
+            return buildItem(
+              watch,
+              hit
+                ? {
+                    price: hit.price,
+                    change: hit.change,
+                    changePct: hit.changePct,
+                    time: hit.updatedAt ? dateTime.format(hit.updatedAt) : "",
+                    stale: indexResult.stale,
+                    name: hit.name,
+                  }
+                : undefined,
+              record,
+            );
+          }
+
           if (watch.market === "us") {
             const hit = usResult.quotes.get(watchSecid(watch));
             return buildItem(
@@ -229,9 +300,10 @@ export function createMarketService(db: AppDatabase) {
       };
     },
 
-    /** 顶部指数条：固定 A 股 + 美股核心指数，一次批量报价。 */
+    /** 顶部指数条：固定 A 股 + 美股核心指数，与自选指数共用同一批快照。 */
     async indices(): Promise<MarketIndexItem[]> {
-      const { quotes, stale } = await quotesBySecids(GLOBAL_INDICES.map((item) => item.secid));
+      const watches = await listWatches();
+      const { quotes, stale } = await loadIndexQuotes(watches);
       return GLOBAL_INDICES.map((meta) => {
         const hit = quotes.get(meta.secid);
         return {
@@ -286,7 +358,7 @@ export function createMarketService(db: AppDatabase) {
             prev_close: null,
             source: "fund",
             stale: false,
-            note: "基金按日披露净值，没有分时行情；切到日/周/月查看净值走势。",
+            note: "基金按日披露净值，没有分时行情；切到日K/周K/月K 查看净值走势。",
             updated_at: updatedAt,
           };
         }

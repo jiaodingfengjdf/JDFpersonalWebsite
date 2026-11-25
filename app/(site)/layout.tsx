@@ -17,6 +17,14 @@ import SeasonalEffect from "@/components/ui/SeasonalEffect";
 import KiraSparkle from "@/components/ui/KiraSparkle";
 import VisitorTracker from "@/components/layout/VisitorTracker";
 import { WELCOME_SESSION_KEY } from "@/lib/welcome";
+import { defaultInterestDropdownConfig } from "@/lib/interest-modules";
+import {
+  NAV_DROPDOWN_CONFIG_KEY,
+  parseNavDropdownConfig,
+  type NavDropdownConfig,
+} from "@/lib/nav-dropdown";
+import { logError } from "@/server/http/logger";
+import { getSiteConfigService } from "@/server/modules/site-config";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import { getThemesService } from "@/server/modules/themes";
 
@@ -24,6 +32,24 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+/**
+ * 服务端读取导航栏「兴趣」配置。
+ *
+ * 必须在 SSR 阶段就有值：否则爬虫与无 JS 环境看到的 HTML 里根本没有这个栏目。
+ * 数据库缺失 / JSON 损坏 / 解析为空时统一回落到默认菜单，栏目永不消失。
+ * 返回值是纯对象，可以安全地作为 prop 传给客户端组件。
+ */
+async function loadNavDropdownConfig(): Promise<NavDropdownConfig> {
+  try {
+    const config = await getSiteConfigService().getPublic();
+    const parsed = parseNavDropdownConfig(config[NAV_DROPDOWN_CONFIG_KEY]);
+    return parsed.links.length > 0 ? parsed : defaultInterestDropdownConfig();
+  } catch (error) {
+    logError("Failed to load nav dropdown, falling back to defaults", error);
+    return defaultInterestDropdownConfig();
+  }
+}
 
 export default async function SiteLayout({
   children,
@@ -33,9 +59,10 @@ export default async function SiteLayout({
   // Site settings are read once per render here and handed to client components
   // through context, so the navbar, background and widgets all render the
   // admin-configured values on the first paint.
-  const [settings, themes] = await Promise.all([
+  const [settings, themes, navDropdown] = await Promise.all([
     loadSiteSettings(),
     getThemesService().listPublic(),
+    loadNavDropdownConfig(),
   ]);
   const bootMode = themes.active?.mode ?? "auto";
 
@@ -67,7 +94,7 @@ export default async function SiteLayout({
                 <MouseTrail />
                 <SeasonalEffect />
                 <KiraSparkle />
-                <Navbar />
+                <Navbar navDropdown={navDropdown} />
                 <main className="flex-1 pt-16">{children}</main>
                 <ClientWidgets />
               </div>
