@@ -27,6 +27,7 @@ COPY . .
 # AUTH_SECRET is injected by the runtime environment. Keep these inline so the
 # placeholder is not persisted as image metadata.
 RUN DATABASE_PATH=/tmp/kirameku-build.db \
+    TURSO_DATABASE_URL="" \
     AUTH_SECRET=build-only-secret-0123456789abcdef0123456789abcdef \
     FRONTEND_ORIGIN=http://localhost:3000 \
     sh -c 'pnpm db:migrate && pnpm build && pnpm install --frozen-lockfile --prod && rm -rf .next/cache'
