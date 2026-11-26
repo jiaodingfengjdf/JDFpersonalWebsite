@@ -29,7 +29,7 @@ export default function ProfileCard({
       <div className="flex items-start justify-between relative z-10">
         <div className="flex items-center gap-4 md:gap-6">
           <div className="flex-shrink-0">
-            <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-sky-400 via-indigo-400 to-purple-400 p-[3px] shadow-lg transition-all duration-500 hover:shadow-xl hover:scale-110 hover:rotate-6 cursor-pointer">
+            <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-sky-500 via-cyan-500 to-slate-400 p-[3px] shadow-lg transition-all duration-500 hover:shadow-xl hover:scale-105 cursor-pointer">
               <img
                 src={profile.avatarUrl}
                 alt="avatar"
@@ -54,21 +54,21 @@ export default function ProfileCard({
             href="/posts"
             count={postCount}
             label="文章"
-            color="text-indigo-600 dark:text-indigo-400"
+            color="text-sky-600 dark:text-sky-400"
           />
           <div className="w-px h-10 bg-slate-300/50 dark:bg-slate-700 hidden md:block" />
           <StatItem
             href="/moments"
             count={chatterCount}
             label="说说"
-            color="text-purple-600 dark:text-purple-400"
+            color="text-teal-600 dark:text-teal-400"
           />
           <div className="w-px h-10 bg-slate-300/50 dark:bg-slate-700 hidden md:block" />
           <StatItem
             href="/photowall"
             count={photoCount}
             label="照片"
-            color="text-pink-600 dark:text-pink-400"
+            color="text-slate-700 dark:text-slate-200"
           />
         </div>
 

@@ -291,7 +291,7 @@ async function checkSiteHealth(): Promise<CheckOutcome> {
   };
 
   try {
-    if (process.env.TURSO_DATABASE_URL) {
+    if (process.env.NODE_ENV !== "test" && process.env.TURSO_DATABASE_URL) {
       const client = getLibsqlClient();
       await client.execute("SELECT 1");
       return base;

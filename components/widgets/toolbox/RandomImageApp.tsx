@@ -7,43 +7,23 @@ import PortalOverlay from "./PortalOverlay";
 const BASE = "https://uapis.cn/api/v1/random/image";
 
 const categories = [
-  { id: "", name: "全局随机" },
-  { id: "acg", name: "二次元" },
-  { id: "landscape", name: "风景" },
-  { id: "anime", name: "混合动漫" },
-  { id: "pc_wallpaper", name: "电脑壁纸" },
+  { id: "landscape", name: "风景摄影" },
+  { id: "pc_wallpaper", name: "桌面壁纸" },
   { id: "mobile_wallpaper", name: "手机壁纸" },
-  { id: "general_anime", name: "动漫" },
-  { id: "ai_drawing", name: "AI绘画" },
-  { id: "bq", name: "表情包" },
-  { id: "furry", name: "福瑞" },
+  { id: "bq", name: "趣味表情" },
 ];
 
 const subTypes: Record<string, { id: string; name: string }[]> = {
-  acg: [
-    { id: "", name: "全部" },
-    { id: "pc", name: "横屏" },
-    { id: "mb", name: "竖屏" },
-  ],
   bq: [
     { id: "", name: "全部" },
-    { id: "eciyuan", name: "二次元" },
-    { id: "ikun", name: "ikun" },
     { id: "xiongmao", name: "熊猫" },
     { id: "waiguoren", name: "外国人" },
     { id: "maomao", name: "猫猫" },
   ],
-  furry: [
-    { id: "", name: "全部" },
-    { id: "z4k", name: "z4k" },
-    { id: "szs8k", name: "szs8k" },
-    { id: "s4k", name: "s4k" },
-    { id: "4k", name: "4k" },
-  ],
 };
 
 export default function RandomImageApp() {
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("landscape");
   const [type, setType] = useState("");
   const [imgUrl, setImgUrl] = useState("");
   const [loading, setLoading] = useState(false);

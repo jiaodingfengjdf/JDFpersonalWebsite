@@ -21,7 +21,7 @@ let libsqlInstance: LibsqlClient | undefined;
 let drizzleInstance: AppDatabase | undefined;
 
 export function isTursoConfigured(): boolean {
-  return Boolean(env.TURSO_DATABASE_URL);
+  return env.NODE_ENV !== "test" && Boolean(env.TURSO_DATABASE_URL);
 }
 
 function openLocalSqlite(): Database.Database {

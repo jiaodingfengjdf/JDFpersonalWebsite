@@ -43,7 +43,7 @@ const settingsLink = (label: string) =>
 const hexColor = z
   .string()
   .trim()
-  .regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, "颜色需要写成 #a18cd1 这样的十六进制");
+  .regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, "颜色需要写成 #0284c7 这样的十六进制");
 
 export const siteSettingsInput = z.object({
   profile: z.object({
@@ -79,7 +79,6 @@ export const siteSettingsInput = z.object({
       .max(SITE_SETTINGS_LIMITS.themeColors, `最多 ${SITE_SETTINGS_LIMITS.themeColors} 个颜色`),
     bgImages: z
       .array(assetUrl("背景图"))
-      .min(1, "至少需要 1 张背景图")
       .max(SITE_SETTINGS_LIMITS.bgImages, `最多 ${SITE_SETTINGS_LIMITS.bgImages} 张背景图`),
     defaultPostCover: assetUrl("默认封面"),
   }),

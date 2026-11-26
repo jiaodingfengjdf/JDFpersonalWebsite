@@ -150,7 +150,7 @@ export default function MomentsClient({
   const router = useRouter();
   const { profile, content } = useSiteSettings();
   const { addToast } = useToast();
-  const avatarSrc = profile.avatarUrl || "/images/hong.jpg";
+  const avatarSrc = profile.avatarUrl || "/images/avatar-jdf.png";
 
   // 管理员快捷发布面板
   const [composerOpen, setComposerOpen] = useState(false);

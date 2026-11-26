@@ -35,7 +35,7 @@ const emptyForm: ThemeFormState = {
   description: "",
   mode: "auto",
   kind: "gradient",
-  colors: "#fbc2eb, #a18cd1, #a1c4fd",
+  colors: "#f8fafc, #e0f2fe, #dbeafe",
   images: "",
   blur: "0",
   cover: "",
@@ -261,7 +261,7 @@ export default function ThemeManager() {
                 id="theme-name"
                 value={form.name}
                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="例如：樱色晚霞"
+                placeholder="例如：晴空极简"
               />
             </div>
 
@@ -327,7 +327,7 @@ export default function ThemeManager() {
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, colors: event.target.value }))
                   }
-                  placeholder="#fbc2eb, #a18cd1"
+                  placeholder="#f8fafc, #e0f2fe"
                 />
               </div>
             ) : (

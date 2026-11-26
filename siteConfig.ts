@@ -18,23 +18,16 @@ export const siteConfig = {
   bio: "不想起床->不想上班->好饿->好困->好想下班->我还不困",
 
   // 头像设置
-  avatarUrl: "/images/middlenightcat.jpg",
+  avatarUrl: "/images/avatar-jdf.png",
 
   // 分享卡片（Open Graph / Twitter）兜底值；可用 SITE_SHARE_* 环境变量覆盖
-  shareImage: "/images/middlenightcat.jpg",
+  shareImage: "/images/default-cover.jpg",
   shareCard: "summary_large_image" as const,
 
-  // 背景设置
-  useGradient: false,
-  themeColors: ["#a18cd1", "#fbc2eb", "#a1c4fd", "#c2e9fb"],
-  bgImages: [
-    "/images/1.webp",
-    "/images/42.webp",
-    "/images/20.webp",
-    "/images/36.webp",
-    "/images/39.webp",
-    "/images/41.webp",
-  ],
+  // 背景设置（默认采用现代极简浅色渐变，无动漫壁纸）
+  useGradient: true,
+  themeColors: ["#f8fafc", "#e0f2fe", "#dbeafe", "#f1f5f9"],
+  bgImages: [],
 
   // 默认封面图
   defaultPostCover: "/images/default-cover.jpg",

@@ -98,8 +98,8 @@ nav {
 }
 
 .glass-input:focus {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: rgba(2, 132, 199, 0.5);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
 }
 
 .dark .glass-input {
@@ -108,8 +108,8 @@ nav {
 }
 
 .dark .glass-input:focus {
-  border-color: rgba(129, 140, 248, 0.5);
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
 }
 
 /* ========== 自定义滚动条 ========== */
@@ -124,17 +124,17 @@ nav {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.3);
+  background: rgba(2, 132, 199, 0.28);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.8);
+  background: rgba(2, 132, 199, 0.72);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+  scrollbar-color: rgba(2, 132, 199, 0.28) transparent;
 }
 
 /* ========== 背景渐变动画 ========== */
@@ -175,26 +175,8 @@ nav {
 /* ========== 暗色模式背景增强 ========== */
 
 .dark body {
-  background: linear-gradient(135deg, #0f0b2e 0%, #1a1145 25%, #0d1b3e 50%, #1e1145 75%, #0f0b2e 100%);
-  background-size: 400% 400%;
-  animation: gradient-flow 20s ease infinite;
-}
-
-/* Live2D 看板娘层级 */
-#waifu {
-  z-index: 40 !important;
-}
-
-#waifu-toggle {
-  z-index: 40 !important;
-}
-
-/* 移动端隐藏看板娘 */
-@media (max-width: 767px) {
-  #waifu,
-  #waifu-toggle {
-    display: none !important;
-  }
+  background: linear-gradient(135deg, #0b1120 0%, #0f172a 45%, #132033 100%);
+  background-size: 200% 200%;
 }
 
 /* Recharts 去掉点击黑框 + 交互样式 */

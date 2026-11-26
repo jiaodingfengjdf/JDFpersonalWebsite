@@ -46,7 +46,8 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
     () => (presetIsGradient && current?.colors.length ? current.colors : appearance.themeColors),
     [presetIsGradient, current, appearance.themeColors],
   );
-  const useGradient = presetIsGradient || (!current && appearance.useGradient);
+  const useGradient =
+    presetIsGradient || (!current && appearance.useGradient) || images.length === 0;
 
   const [bgImage, setBgImage] = useState(images[images.length - 1] ?? "");
   const [bgBlur, setBgBlur] = useState(current?.blur ?? 20);

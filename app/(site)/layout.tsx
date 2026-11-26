@@ -5,16 +5,11 @@ import { ThemePresetProvider } from "@/components/providers/ThemePresetProvider"
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { BackgroundProvider } from "@/components/providers/BackgroundProvider";
 import { MusicProvider } from "@/components/providers/MusicProvider";
-import { EffectProvider } from "@/components/providers/EffectProvider";
 import { SiteSettingsProvider } from "@/components/providers/SiteSettingsProvider";
 import BackgroundRenderer from "@/components/layout/BackgroundRenderer";
 import Navbar from "@/components/layout/Navbar";
 import ClientWidgets from "@/components/layout/ClientWidgets";
-import ClickEffect from "@/components/ui/ClickEffect";
 import RadialMenu from "@/components/ui/RadialMenu";
-import MouseTrail from "@/components/ui/MouseTrail";
-import SeasonalEffect from "@/components/ui/SeasonalEffect";
-import KiraSparkle from "@/components/ui/KiraSparkle";
 import VisitorTracker from "@/components/layout/VisitorTracker";
 import { WELCOME_SESSION_KEY } from "@/lib/welcome";
 import { defaultInterestDropdownConfig } from "@/lib/interest-modules";
@@ -80,28 +75,22 @@ export default async function SiteLayout({
       />
       <ThemePresetProvider active={themes.active} presets={themes.presets}>
         <ThemeProvider>
-        <EffectProvider>
-        <BackgroundProvider>
-          <MusicProvider>
-            <ToastProvider>
-              <div
-                className={`${geistMono.variable} flex min-h-screen flex-col`}
-              >
-                <BackgroundRenderer />
-                <VisitorTracker />
-                <ClickEffect />
-                <RadialMenu />
-                <MouseTrail />
-                <SeasonalEffect />
-                <KiraSparkle />
-                <Navbar navDropdown={navDropdown} />
-                <main className="flex-1 pt-16">{children}</main>
-                <ClientWidgets />
-              </div>
-            </ToastProvider>
-          </MusicProvider>
-        </BackgroundProvider>
-      </EffectProvider>
+          <BackgroundProvider>
+            <MusicProvider>
+              <ToastProvider>
+                <div
+                  className={`${geistMono.variable} flex min-h-screen flex-col`}
+                >
+                  <BackgroundRenderer />
+                  <VisitorTracker />
+                  <RadialMenu />
+                  <Navbar navDropdown={navDropdown} />
+                  <main className="flex-1 pt-16">{children}</main>
+                  <ClientWidgets />
+                </div>
+              </ToastProvider>
+            </MusicProvider>
+          </BackgroundProvider>
         </ThemeProvider>
       </ThemePresetProvider>
     </SiteSettingsProvider>

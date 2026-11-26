@@ -75,7 +75,7 @@ const PRESET_FEEDS: PresetFeed[] = [
     name: "机核 GCORES",
     url: "https://www.gcores.com/rss",
     category: "design",
-    description: "游戏文化、ACG 与创意设计",
+    description: "游戏文化与创意设计",
   },
   {
     name: "36氪",

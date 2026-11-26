@@ -115,10 +115,10 @@ function validate(settings: SiteSettings): string | null {
   if (appearance.themeColors.length < 2) return "至少需要 2 个渐变颜色";
   for (const [index, color] of appearance.themeColors.entries()) {
     if (!HEX_COLOR.test(color.trim())) {
-      return "第 " + (index + 1) + " 个颜色需要写成 #a18cd1 这样的十六进制";
+      return "第 " + (index + 1) + " 个颜色需要写成 #0284c7 这样的十六进制";
     }
   }
-  if (appearance.bgImages.length < 1) return "至少需要 1 张背景图";
+  if (!appearance.useGradient && appearance.bgImages.length < 1) return "图片背景下至少需要 1 张背景图";
   for (const [index, image] of appearance.bgImages.entries()) {
     if (!isSafeAssetUrl(image)) {
       return "第 " + (index + 1) + " 张背景图地址需要以 / 开头，或使用 http(s)://";
@@ -934,30 +934,6 @@ function SiteSettingsEditor({
                   onChange={(event) =>
                     updateContent({
                       icp: { ...draft.content.icp, link: event.target.value },
-                    })
-                  }
-                />
-              </Field>
-              <Field id="moe-icp-name" label="萌备案号">
-                <Input
-                  id="moe-icp-name"
-                  value={draft.content.moeIcp.name}
-                  maxLength={SITE_SETTINGS_LIMITS.icpName}
-                  onChange={(event) =>
-                    updateContent({
-                      moeIcp: { ...draft.content.moeIcp, name: event.target.value },
-                    })
-                  }
-                />
-              </Field>
-              <Field id="moe-icp-link" label="萌备案链接">
-                <Input
-                  id="moe-icp-link"
-                  value={draft.content.moeIcp.link}
-                  placeholder="https://icp.gov.moe"
-                  onChange={(event) =>
-                    updateContent({
-                      moeIcp: { ...draft.content.moeIcp, link: event.target.value },
                     })
                   }
                 />
