@@ -8,7 +8,7 @@ import type { DigestPayload } from "@/server/modules/digest";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import DigestClient from "./DigestClient";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 function requireModule(href: string): InterestModule {
   const entry = interestModuleByHref(href);

@@ -26,33 +26,35 @@ async function loadAlbums(): Promise<Album[]> {
       new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
   );
 
-  return Promise.all(
-    albumList.map(async (album) => {
-      const photos = await service.listPhotos(album.id);
-      return {
-        id: album.id,
-        title: album.title,
-        description: album.description,
-        updatedAt: album.updated_at,
-        photoCount: album.photo_count,
-        photos: photos
-          .slice()
-          .reverse()
-          .map(
-            (photo): Photo => ({
-              id: String(photo.id),
-              url: photo.url,
-              caption: photo.caption,
-              width: photo.width,
-              height: photo.height,
-              format: photo.format,
-              orientation:
-                (photo.orientation as Photo["orientation"]) || "landscape",
-            }),
-          ),
-      };
-    }),
+  const photosByAlbum = await service.listPhotosByAlbums(
+    albumList.map((album) => album.id),
   );
+
+  return albumList.map((album) => {
+    const photos = photosByAlbum.get(album.id) ?? [];
+    return {
+      id: album.id,
+      title: album.title,
+      description: album.description,
+      updatedAt: album.updated_at,
+      photoCount: album.photo_count,
+      photos: photos
+        .slice()
+        .reverse()
+        .map(
+          (photo): Photo => ({
+            id: String(photo.id),
+            url: photo.url,
+            caption: photo.caption,
+            width: photo.width,
+            height: photo.height,
+            format: photo.format,
+            orientation:
+              (photo.orientation as Photo["orientation"]) || "landscape",
+          }),
+        ),
+    };
+  });
 }
 
 export default async function PhotoWallPage() {

@@ -167,8 +167,11 @@ export async function runStream(
       };
 
       const apiMessages = buildApiMessages(conv, settings);
+      const currentState = deps.getState();
       const body = buildRequestBody(settings, titleEnabled && step === 0, {
-        memories: deps.getState().memories,
+        memories: currentState.memories,
+        tasks: currentState.tasks,
+        skills: currentState.skills,
         now: Date.now(),
       });
 

@@ -46,6 +46,46 @@ export default async function PostsPage({
   const initialTag = firstParam(resolvedParams.tag).slice(0, 100) || null;
   const initialSort = parseSort(firstParam(resolvedParams.sort));
 
+  const needsFullBatch =
+    Boolean(initialQuery) || Boolean(initialTag) || initialSort !== "latest";
+  const fetchSize = needsFullBatch ? FULL_FILTER_SIZE : PAGE_SIZE;
+
+  // 无分类参数时分类列表与文章列表完全独立，直接并发查询省去 1 次跨区往返
+  if (!rawCategory) {
+    const [categories, postsOutcome] = await Promise.all([
+      getCategoriesService()
+        .list()
+        .catch((error) => {
+          console.error("Failed to load post categories", error);
+          return [];
+        }),
+      getPostsService()
+        .list({
+          status: "published",
+          page: 1,
+          size: fetchSize,
+        })
+        .then((items) => ({ posts: items, initialError: false }))
+        .catch((error) => {
+          console.error("Failed to load posts", error);
+          return { posts: [], initialError: true };
+        }),
+    ]);
+
+    return (
+      <PostsClient
+        initialCategories={categories}
+        initialPosts={postsOutcome.posts}
+        initialCategory={null}
+        initialTag={initialTag}
+        initialQuery={initialQuery}
+        initialSort={initialSort}
+        initialFetchSize={fetchSize}
+        initialError={postsOutcome.initialError}
+      />
+    );
+  }
+
   const categories = await getCategoriesService()
     .list()
     .catch((error) => {
@@ -54,20 +94,12 @@ export default async function PostsPage({
     });
 
   // 支持按分类 slug 或分类名称跳转（例如来自文章详情页的分类标签链接）
-  const matchedCategory = rawCategory
-    ? categories.find(
-        (cat) =>
-          cat.slug.toLowerCase() === rawCategory.toLowerCase() ||
-          cat.name.toLowerCase() === rawCategory.toLowerCase(),
-      )
-    : undefined;
-  const initialCategory = matchedCategory
-    ? matchedCategory.slug
-    : rawCategory || null;
-
-  const needsFullBatch =
-    Boolean(initialQuery) || Boolean(initialTag) || initialSort !== "latest";
-  const fetchSize = needsFullBatch ? FULL_FILTER_SIZE : PAGE_SIZE;
+  const matchedCategory = categories.find(
+    (cat) =>
+      cat.slug.toLowerCase() === rawCategory.toLowerCase() ||
+      cat.name.toLowerCase() === rawCategory.toLowerCase(),
+  );
+  const initialCategory = matchedCategory ? matchedCategory.slug : rawCategory;
 
   const { posts, initialError } = await getPostsService()
     .list({

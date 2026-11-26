@@ -666,6 +666,120 @@ export function createPostsService(db: AppDatabase) {
       }));
     },
 
+    /**
+     * 按发布时间邻近查询上下篇已发布文章（两条 LIMIT 1 轻量查询并发，替代拉取 100 篇全文列表）。
+     */
+    async getAdjacentPublished(input: {
+      id: number;
+      publishedAt: string | null;
+      createdAt: string;
+    }): Promise<{
+      prev: { slug: string; title: string; category: string; published_at: string } | null;
+      next: { slug: string; title: string; category: string; published_at: string } | null;
+    }> {
+      const anchorMs = new Date(input.publishedAt ?? input.createdAt).getTime();
+      const effectiveTs = sql<number>`coalesce(${post.publishedAt}, ${post.createdAt})`;
+      const publishedFilter = inArray(post.status, ["published", "unpublish_scheduled"]);
+
+      const [newerRows, olderRows] = await Promise.all([
+        db
+          .select({
+            slug: post.slug,
+            title: post.title,
+            categoryName: category.name,
+            publishedAt: post.publishedAt,
+            createdAt: post.createdAt,
+          })
+          .from(post)
+          .leftJoin(category, eq(post.categoryId, category.id))
+          .where(
+            and(
+              publishedFilter,
+              ne(post.id, input.id),
+              sql`(${effectiveTs} > ${anchorMs} OR (${effectiveTs} = ${anchorMs} AND ${post.id} > ${input.id}))`,
+            ),
+          )
+          .orderBy(sql`${effectiveTs} ASC`, sql`${post.id} ASC`)
+          .limit(1),
+        db
+          .select({
+            slug: post.slug,
+            title: post.title,
+            categoryName: category.name,
+            publishedAt: post.publishedAt,
+            createdAt: post.createdAt,
+          })
+          .from(post)
+          .leftJoin(category, eq(post.categoryId, category.id))
+          .where(
+            and(
+              publishedFilter,
+              ne(post.id, input.id),
+              sql`(${effectiveTs} < ${anchorMs} OR (${effectiveTs} = ${anchorMs} AND ${post.id} < ${input.id}))`,
+            ),
+          )
+          .orderBy(sql`${effectiveTs} DESC`, sql`${post.id} DESC`)
+          .limit(1),
+      ]);
+
+      const toNeighbor = (
+        row: (typeof newerRows)[number] | undefined,
+      ) =>
+        row
+          ? {
+              slug: row.slug,
+              title: row.title,
+              category: row.categoryName ?? "",
+              published_at: row.publishedAt?.toISOString() ?? iso(row.createdAt),
+            }
+          : null;
+
+      // 时间倒序视角下：prevPost 为更新的一篇，nextPost 为更早的一篇（与原列表 chronological 顺序完全一致）
+      return {
+        prev: toNeighbor(newerRows[0]),
+        next: toNeighbor(olderRows[0]),
+      };
+    },
+
+    /**
+     * RSS 专用批量读取：单次带出最近 N 篇已发布文章正文 + 1 次标签聚合（2 次 RTT 替代 20+ 次逐篇查询）。
+     */
+    async listForFeed(limit = 10): Promise<PostDetail[]> {
+      const rows = await db
+        .select({
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          description: post.description,
+          content: post.content,
+          cover: post.cover,
+          status: post.status,
+          categoryId: post.categoryId,
+          scheduledAt: post.scheduledAt,
+          isPinned: post.isPinned,
+          views: post.views,
+          likes: post.likes,
+          wordCount: post.wordCount,
+          readingTime: post.readingTime,
+          publishedAt: post.publishedAt,
+          createdAt: post.createdAt,
+          updatedAt: post.updatedAt,
+          categoryName: category.name,
+        })
+        .from(post)
+        .leftJoin(category, eq(post.categoryId, category.id))
+        .where(inArray(post.status, ["published", "unpublish_scheduled"]))
+        .orderBy(desc(post.isPinned), desc(post.createdAt), desc(post.id))
+        .limit(limit);
+
+      const tagMap = await loadTags(
+        db,
+        rows.map((row) => row.id),
+      );
+
+      return rows.map((row) => toDetail(row, tagMap.get(row.id) ?? []));
+    },
+
     async count(status?: string): Promise<number> {
       const query = db
         .select({ value: sql<number>`count(*)` })

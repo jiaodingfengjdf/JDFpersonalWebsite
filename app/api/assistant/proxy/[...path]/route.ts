@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/server/auth/guard";
 import { assertSameOrigin } from "@/server/http/origin";
 import { loadAssistantRuntimeConfig } from "@/server/modules/assistant";
 
@@ -55,11 +56,19 @@ async function handleProxy(
   segments: string[],
 ): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
+    if (!request.headers.get("origin")) {
+      return jsonError(403, "跨站请求被拒绝", "forbidden");
+    }
     try {
       assertSameOrigin(request);
     } catch {
       return jsonError(403, "跨站请求被拒绝", "forbidden");
     }
+  }
+
+  const admin = await getAdminSession();
+  if (!admin) {
+    return jsonError(401, "私人 AI 助理仅限站长本人登录使用", "unauthorized");
   }
 
   const action = segments[0] ?? "";

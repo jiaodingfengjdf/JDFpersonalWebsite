@@ -156,6 +156,12 @@ nav {
   animation: gradient-flow 15s ease infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .gradient-background {
+    animation: none;
+  }
+}
+
 /* ========== 文字截断 ========== */
 
 .line-clamp-1 {

@@ -478,14 +478,16 @@ export default function Composer({
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={
-              transcribing
-                ? '正在识别语音…'
-                : dragging
-                  ? '松开即可添加附件…'
-                  : '发消息给助理，支持粘贴图片或点击下方快捷模板…'
+              !isAdmin
+                ? '私人 AI 助理仅限站长本人登录使用…'
+                : transcribing
+                  ? '正在识别语音…'
+                  : dragging
+                    ? '松开即可添加附件…'
+                    : '发消息给助理，支持粘贴图片或点击下方快捷模板…'
             }
             rows={1}
-            disabled={recording}
+            disabled={!isAdmin || recording}
             enterKeyHint="send"
           />
           <div className="input-tools">
@@ -579,7 +581,7 @@ export default function Composer({
               className={`tool-toggle ${recording ? 'on' : ''}`}
               onClick={() => void toggleRecord()}
               aria-label="语音输入"
-              disabled={transcribing}
+              disabled={!isAdmin || transcribing}
             >
               {transcribing ? <span className="spinner" /> : <MicIcon size={14} />}
               {transcribing ? '识别中' : recording ? '录制中' : '语音'}
@@ -590,7 +592,7 @@ export default function Composer({
               className="tool-toggle tool-attach"
               onClick={() => fileRef.current?.click()}
               aria-label="添加附件"
-              disabled={transcribing}
+              disabled={!isAdmin || transcribing}
             >
               <PaperclipIcon size={14} />
               附件{attachments.length > 0 ? ` ${attachments.length}` : ''}
@@ -652,7 +654,7 @@ export default function Composer({
           className={`send-btn ${streaming ? 'is-stop' : ''}`}
           onClick={submit}
           aria-label={streaming ? '停止生成' : '发送'}
-          disabled={!streaming && !text.trim() && attachments.length === 0 && !uploading}
+          disabled={!isAdmin || (!streaming && !text.trim() && attachments.length === 0 && !uploading)}
         >
           {streaming ? <StopIcon size={18} /> : <SendIcon size={20} />}
         </button>

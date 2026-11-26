@@ -1,15 +1,23 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 /**
  * 前台大多数页面是 ISR（见各 page.tsx 的 `export const revalidate`），
  * 后台写完数据后必须显式失效，否则最长要等 5 分钟才能看到改动。
  *
- * `revalidatePath` 在非 Next 请求上下文（单元测试、独立脚本）里会抛错，
+ * `revalidatePath` / `revalidateTag` 在非 Next 请求上下文（单元测试、独立脚本）里会抛错，
  * 这里统一吞掉：调用方只关心写操作本身是否成功。
  */
 function safeRevalidate(path: string, type?: "page" | "layout"): void {
   try {
     revalidatePath(path, type);
+  } catch {
+    // 非请求上下文，忽略。
+  }
+}
+
+export function safeRevalidateTag(tag: string): void {
+  try {
+    revalidateTag(tag, "max");
   } catch {
     // 非请求上下文，忽略。
   }
@@ -57,5 +65,7 @@ export function revalidateTaxonomy(): void {
 
 /** 导航与站点配置：影响全站布局。 */
 export function revalidateSiteChrome(): void {
+  safeRevalidateTag("site-config");
+  safeRevalidateTag("themes");
   safeRevalidate("/", "layout");
 }

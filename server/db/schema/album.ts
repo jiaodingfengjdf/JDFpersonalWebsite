@@ -32,5 +32,8 @@ export const photo = sqliteTable(
     bytes: integer("bytes"),
     format: text("format"),
   },
-  (t) => [index("idx_photo_album").on(t.albumId)],
+  (t) => [
+    index("idx_photo_album").on(t.albumId),
+    index("idx_photo_album_sort").on(t.albumId, t.sort, t.id),
+  ],
 );

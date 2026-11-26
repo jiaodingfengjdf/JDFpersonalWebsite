@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { loadSiteSettings } from "@/server/modules/site-settings";
-import { marked } from "marked";
-import { getPostsService } from "@/server/modules/posts";
-import type {
-  PostDetail,
-  PostItem,
-} from "@/server/modules/posts/contracts";
+import { renderMarkdown } from "@/lib/markdown";
 import { env } from "@/server/env";
+import { getPostsService } from "@/server/modules/posts";
+import type { PostDetail } from "@/server/modules/posts/contracts";
+import { loadSiteSettings } from "@/server/modules/site-settings";
 import { buildShareConfig, resolveSiteUrl } from "@/server/site";
 
 // The channel <link> and <atom:link> are configuration, so this route must be
@@ -20,35 +17,18 @@ function feedAuthor(authorName: string): string {
 
 export async function GET() {
   try {
-    const service = getPostsService();
-    const posts = await service.list({
-      status: "published",
-      page: 1,
-      size: 10,
-    });
+    const [posts, settings] = await Promise.all([
+      getPostsService().listForFeed(10),
+      loadSiteSettings(),
+    ]);
 
-    // The list response intentionally omits content; fetch each body locally.
-    const detailResults = await Promise.allSettled(
-      posts.map((post) =>
-        service.getBySlug(post.slug, { publishedOnly: true }),
-      ),
-    );
-
-    const settings = await loadSiteSettings();
     const siteUrl = resolveSiteUrl(settings);
     const share = buildShareConfig(settings, siteUrl);
     const authorName = feedAuthor(settings.profile.authorName);
 
     const items = (
       await Promise.all(
-        posts.map(async (post, i) => {
-          const detail =
-            detailResults[i].status === "fulfilled"
-              ? detailResults[i].value
-              : null;
-
-          return generateItem(post, detail, siteUrl, authorName);
-        })
+        posts.map((post) => generateItem(post, siteUrl, authorName)),
       )
     ).join("\n");
 
@@ -69,6 +49,7 @@ ${items}
     return new NextResponse(xml, {
       headers: {
         "Content-Type": "application/rss+xml; charset=utf-8",
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
       },
     });
   } catch (error) {
@@ -78,10 +59,9 @@ ${items}
 }
 
 async function generateItem(
-  post: PostItem,
-  detail: PostDetail | null,
+  post: PostDetail,
   siteUrl: string,
-  authorName: string
+  authorName: string,
 ): Promise<string> {
   const postUrl = `${siteUrl}/posts/${post.slug}`;
   const pubDate = post.published_at
@@ -92,13 +72,12 @@ async function generateItem(
     .map((tag) => `      <category>${escapeXml(tag)}</category>`)
     .join("\n");
 
-  // 全文 HTML（markdown → HTML）
   let contentHtml = "";
-  if (detail?.content) {
+  if (post.content) {
     try {
-      contentHtml = await marked.parse(detail.content);
+      contentHtml = await renderMarkdown(post.content);
     } catch {
-      contentHtml = escapeXml(detail.content);
+      contentHtml = escapeXml(post.content);
     }
   }
 

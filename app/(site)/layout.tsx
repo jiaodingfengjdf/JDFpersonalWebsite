@@ -1,5 +1,5 @@
+import { unstable_cache } from "next/cache";
 import { Geist_Mono } from "next/font/google";
-import "highlight.js/styles/vs2015.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ThemePresetProvider } from "@/components/providers/ThemePresetProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
@@ -19,7 +19,7 @@ import {
   type NavDropdownConfig,
 } from "@/lib/nav-dropdown";
 import { logError } from "@/server/http/logger";
-import { getSiteConfigService } from "@/server/modules/site-config";
+import { getCachedPublicSiteConfig } from "@/server/modules/site-config";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import { getThemesService } from "@/server/modules/themes";
 
@@ -27,6 +27,12 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+const getCachedPublicThemes = unstable_cache(
+  async () => getThemesService().listPublic(),
+  ["public-themes-v1"],
+  { revalidate: 60, tags: ["themes", "site-config"] },
+);
 
 /**
  * 服务端读取导航栏「兴趣」配置。
@@ -37,7 +43,7 @@ const geistMono = Geist_Mono({
  */
 async function loadNavDropdownConfig(): Promise<NavDropdownConfig> {
   try {
-    const config = await getSiteConfigService().getPublic();
+    const config = await getCachedPublicSiteConfig();
     const parsed = parseNavDropdownConfig(config[NAV_DROPDOWN_CONFIG_KEY]);
     return parsed.links.length > 0 ? parsed : defaultInterestDropdownConfig();
   } catch (error) {
@@ -56,7 +62,7 @@ export default async function SiteLayout({
   // admin-configured values on the first paint.
   const [settings, themes, navDropdown] = await Promise.all([
     loadSiteSettings(),
-    getThemesService().listPublic(),
+    getCachedPublicThemes().catch(() => getThemesService().listPublic()),
     loadNavDropdownConfig(),
   ]);
   const bootMode = themes.active?.mode ?? "auto";

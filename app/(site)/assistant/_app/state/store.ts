@@ -907,17 +907,17 @@ function ensureReady(): boolean {
     toast('正在生成回答，请先停止', 'info');
     return false;
   }
+  if (!state.isAdmin) {
+    toast('私人 AI 助理仅限站长本人登录使用', 'info');
+    return false;
+  }
   const hasKey =
     Boolean(state.settings.apiKey.trim()) ||
     state.apiKeyConfigured ||
     state.publicConfig.configured;
   if (!hasKey && !state.settings.mockMode) {
-    if (state.isAdmin) {
-      toast('请先在设置里填写并保存 DeepSeek API Key（或开启演示模式）', 'error');
-      openSettings();
-    } else {
-      toast('AI 助理服务暂未由站长开放或尚未完成配置', 'info');
-    }
+    toast('请先在设置里填写并保存 DeepSeek API Key（或开启演示模式）', 'error');
+    openSettings();
     return false;
   }
   return true;

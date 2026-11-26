@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CHANNEL_TYPES = ["telegram", "email", "webhook"] as const;
+export const CHANNEL_TYPES = ["telegram", "email", "webhook", "feishu"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 
 export const NOTIFICATION_LEVELS = ["info", "warning", "critical"] as const;
@@ -159,6 +159,30 @@ export const CHANNEL_SPECS: Record<ChannelType, ChannelSpec> = {
         kind: "textarea",
         placeholder: '{"Authorization":"Bearer xxx"}',
         help: "JSON 对象，可选；用于鉴权头等自定义字段。",
+      },
+    ],
+  },
+  feishu: {
+    type: "feishu",
+    label: "飞书群机器人",
+    description:
+      "通过飞书群「自定义机器人」发送交互式消息卡片，支持飞书官方加签密钥校验，适配行情预警、定时巡检与 AI 助理主动播报。",
+    fields: [
+      {
+        key: "url",
+        label: "飞书 Webhook 地址",
+        kind: "text",
+        required: true,
+        placeholder: "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx",
+        help: "在飞书群设置 → 群机器人 → 添加自定义机器人后获取。",
+      },
+      {
+        key: "secret",
+        label: "签名校验密钥（可选）",
+        kind: "password",
+        secret: true,
+        placeholder: "开启「签名校验」时填写的密钥",
+        help: "若飞书机器人安全设置勾选了「签名校验」，填入密钥后自动附带 timestamp + HMAC-SHA256 签名；保存后不再回显。",
       },
     ],
   },

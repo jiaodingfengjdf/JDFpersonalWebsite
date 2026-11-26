@@ -128,6 +128,7 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
   const persist = (): void => {
     const state = deps.getState();
     void kvSet(AGENT_KEYS.memories, state.memories);
+    void kvSet(AGENT_KEYS.tasks, state.tasks);
     void kvSet(AGENT_KEYS.notes, state.notes);
     void kvSet(AGENT_KEYS.skills, state.skills);
     setSkillRegistry(state.skills);
@@ -181,6 +182,23 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
   const deleteMemory = (id: string): void => {
     deps.setState((s) => ({ memories: s.memories.filter((m) => m.id !== id) }));
     persist();
+  };
+
+  const addTask = (input: { title: string; notes?: string; dueAt?: number }): AgentTask => {
+    const now = Date.now();
+    const task: AgentTask = {
+      id: uid('task'),
+      title: input.title.trim().slice(0, 160) || '未命名任务',
+      status: 'todo',
+      notes: input.notes?.trim() || undefined,
+      dueAt: input.dueAt,
+      reminderAt: input.dueAt,
+      createdAt: now,
+      updatedAt: now,
+    };
+    deps.setState((s) => ({ tasks: [task, ...s.tasks] }));
+    persist();
+    return task;
   };
 
   const updateTask = (id: string, patch: TaskPatch): AgentTask | null => {
@@ -370,6 +388,16 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
       );
     },
     addNote: (input) => addNote(input),
+    listTasks: (includeDone = false) => {
+      const tasks = deps.getState().tasks;
+      return includeDone ? tasks : tasks.filter((t) => t.status !== 'done');
+    },
+    addTask: (input) => addTask(input),
+    completeTask: (id: string) => {
+      const target = deps.getState().tasks.find((t) => t.id === id);
+      if (!target) return { ok: false, message: `未找到任务（id: ${id}）` };
+      return { ok: true, message: completeTaskOnce(target) };
+    },
   });
 
   /** 每轮结束后异步抽取记忆；失败由调用方决定提示方式。 */

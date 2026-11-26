@@ -116,6 +116,10 @@ export interface ToolContext {
   listNotes(query?: string): AgentNote[];
   addNote(input: { title?: string; text: string }): AgentNote;
 
+  listTasks(includeDone?: boolean): AgentTask[];
+  addTask(input: { title: string; notes?: string; dueAt?: number }): AgentTask;
+  completeTask(id: string): { ok: boolean; message: string };
+
   /** 用户所在地（来自设置），用于时间/时区描述 */
   location(): string;
 

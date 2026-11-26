@@ -163,6 +163,7 @@ export default function EmptyState({
   }, [category]);
 
   const handleCardPick = (prompt: string) => {
+    if (!isAdmin) return;
     if (onFillPrompt) onFillPrompt(prompt);
     else void sendMessage(prompt);
   };
@@ -180,13 +181,13 @@ export default function EmptyState({
         </div>
         <h1 className="empty-title">{greeting()}，随时开始对话</h1>
         <p className="empty-sub">
-          {publicConfig?.welcomeMessage?.trim()
-            ? publicConfig.welcomeMessage.trim()
-            : needsKey
-              ? isAdmin
+          {!isAdmin
+            ? '私人 AI 助理仅对站长本人开放，请先登录后台账号后使用。'
+            : publicConfig?.welcomeMessage?.trim()
+              ? publicConfig.welcomeMessage.trim()
+              : needsKey
                 ? '完成 API Key 配置后即可体验联网检索、深度思考、文档阅读与语音输入。'
-                : '支持写作润色、代码排查、知识总结与灵感发散，当前等待站长完成模型配置。'
-              : '支持联网检索、深度推理、代码高亮、多图附件与个人长期记忆，点击下方场景即可开始。'}
+                : '支持联网检索、深度推理、代码高亮、多图附件与个人长期记忆，点击下方场景即可开始。'}
         </p>
 
         <div className="empty-status-pill" role="status">
@@ -219,10 +220,10 @@ export default function EmptyState({
         </button>
       ) : null}
 
-      {!isAdmin && needsKey ? (
+      {!isAdmin ? (
         <div className="empty-readonly-notice">
           <LockIcon size={15} />
-          <span>模型密钥与系统参数由站长统一维护，当前尚未开启在线服务。</span>
+          <span>私人 AI 助理仅限站长本人登录使用，访客不可发起对话。</span>
           <a href="/admin/login?next=/assistant" className="empty-login-link">
             <LogInIcon size={13} />
             站长登录

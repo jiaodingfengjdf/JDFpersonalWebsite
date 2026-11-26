@@ -292,10 +292,97 @@ const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   },
 
   /* ---------------------------------------------------------------- */
+  add_task: {
+    schema: {
+      name: 'add_task',
+      description:
+        '新增一条待办任务（行动项、提醒、计划）。用户提到要做的事或要求提醒时调用。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: '任务标题，简洁明确。' },
+          notes: { type: 'string', description: '可选补充说明。' },
+          dueAt: {
+            type: 'string',
+            description: '可选截止时间，ISO 8601 格式如 2026-12-01T09:00。',
+          },
+        },
+        required: ['title'],
+      },
+    },
+    run: (input, ctx) =>
+      guard('创建任务', () => {
+        const title = readString(input, 'title') || pickAnyText(input);
+        if (!title) return fail('title 不能为空：请提供任务标题。');
+        const notes = readString(input, 'notes');
+        const rawDue = readString(input, 'dueAt');
+        let dueAt: number | undefined;
+        if (rawDue) {
+          const normalized = /^\d{4}-\d{2}-\d{2}$/.test(rawDue)
+            ? `${rawDue}T00:00:00`
+            : rawDue.replace(' ', 'T');
+          const parsed = Date.parse(normalized);
+          if (!Number.isNaN(parsed)) dueAt = parsed;
+        }
+        const task = ctx.addTask({ title, notes: notes || undefined, dueAt });
+        const dueLabel = task.dueAt ? ` · 截止 ${formatStamp(task.dueAt)}` : '';
+        return ok(`已创建任务：${task.title}${dueLabel}（id: ${task.id}）`, task);
+      }),
+  },
 
   /* ---------------------------------------------------------------- */
+  list_tasks: {
+    schema: {
+      name: 'list_tasks',
+      description: '查看用户的待办任务列表。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          includeDone: {
+            type: 'boolean',
+            description: '是否包含已完成任务，默认 false。',
+          },
+        },
+      },
+    },
+    run: (input, ctx) =>
+      guard('查询任务', () => {
+        const includeDone = Boolean(input.includeDone);
+        const tasks = ctx.listTasks(includeDone);
+        if (tasks.length === 0) {
+          return ok(includeDone ? '还没有任何任务' : '当前没有未完成的待办任务', []);
+        }
+        const lines = renderList(
+          tasks.map((t) => {
+            const due = t.dueAt ? ` · 截止 ${formatStamp(t.dueAt)}` : '';
+            return `- [${t.status}] ${collapse(t.title)}${due}（id: ${t.id}）`;
+          }),
+        );
+        return ok([`共 ${tasks.length} 条任务：`, ...lines].join('\n'), tasks);
+      }),
+  },
 
   /* ---------------------------------------------------------------- */
+  complete_task: {
+    schema: {
+      name: 'complete_task',
+      description: '将指定任务标记为已完成（需要任务 id，可先用 list_tasks 查询）。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '任务 id。' },
+        },
+        required: ['id'],
+      },
+    },
+    run: (input, ctx) =>
+      guard('完成任务', () => {
+        const id = readString(input, 'id');
+        if (!id) return fail('id 不能为空：请先用 list_tasks 查询任务 id。');
+        const res = ctx.completeTask(id);
+        return res.ok ? ok(res.message, { id }) : fail(res.message);
+      }),
+  },
 
   /* ---------------------------------------------------------------- */
   add_note: {

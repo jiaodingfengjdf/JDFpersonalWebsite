@@ -22,6 +22,9 @@
 const OPTIMIZED_EXTERNAL_HOSTS = [
   // GitHub 头像：评论、留言、说说里大量出现，尺寸小但请求量高
   "avatars.githubusercontent.com",
+  // 自有图床与 OSS（已在 next.config.mjs remotePatterns 登记）
+  "static.hiromu.top",
+  "hiromu520.oss-cn-beijing.aliyuncs.com",
 ];
 
 /** 取出 URL 的 hostname，取不到就返回空串。 */

@@ -72,6 +72,7 @@ describe("notifications service", () => {
       "telegram",
       "email",
       "webhook",
+      "feishu",
     ]);
     expect(state.channels.every((channel) => !channel.enabled)).toBe(true);
     expect(state.rules.length).toBeGreaterThan(0);
@@ -286,5 +287,47 @@ describe("notifications service", () => {
       eventKey: "disk.low",
     });
     expect(perEvent.total).toBe(2);
+  });
+
+  it("sends signed interactive cards to Feishu custom bot and checks status code", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ code: 0, msg: "success" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      await service.updateChannel("feishu", {
+        enabled: true,
+        config: {
+          url: "https://open.feishu.cn/open-apis/bot/v2/hook/test-hook",
+          secret: "feishu-sign-secret",
+        },
+      });
+
+      const masked = (await service.getState()).channels.find(
+        (c) => c.type === "feishu",
+      );
+      expect(masked?.configured).toBe(true);
+      expect(masked?.config.secret).toBe(SECRET_MASK);
+
+      await service.testChannel("feishu");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toBe(
+        "https://open.feishu.cn/open-apis/bot/v2/hook/test-hook",
+      );
+      expect(calls[0]?.body.msg_type).toBe("interactive");
+      expect(typeof calls[0]?.body.timestamp).toBe("string");
+      expect(typeof calls[0]?.body.sign).toBe("string");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

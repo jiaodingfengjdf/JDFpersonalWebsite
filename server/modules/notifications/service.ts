@@ -38,6 +38,7 @@ import { openSecret, sealSecret } from "./secrets";
 import { sendTelegram } from "./channels/telegram";
 import { sendEmail } from "./channels/email";
 import { sendWebhook } from "./channels/webhook";
+import { sendFeishu } from "./channels/feishu";
 import { DeliveryError, describeError, sleep } from "./transport";
 
 const CHANNEL_SENDERS: Record<
@@ -47,6 +48,7 @@ const CHANNEL_SENDERS: Record<
   telegram: sendTelegram,
   email: sendEmail,
   webhook: sendWebhook,
+  feishu: sendFeishu,
 };
 
 const MAX_ATTEMPTS = 3;

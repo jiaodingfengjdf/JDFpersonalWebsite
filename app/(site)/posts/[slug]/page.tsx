@@ -80,38 +80,23 @@ export default async function PostDetailPage({ params }: PageProps) {
   if (!post) notFound();
 
   const { content, ...initialPost } = post;
-  const [{ html: contentHtml, toc }, base, allPublished] = await Promise.all([
+  const [{ html: contentHtml, toc }, base, adjacent] = await Promise.all([
     renderMarkdownWithToc(content),
     getSiteUrl(),
     getPostsService()
-      .list({ status: "published", page: 1, size: 100 })
-      .catch(() => []),
+      .getAdjacentPublished({
+        id: post.id,
+        publishedAt: post.published_at,
+        createdAt: post.created_at,
+      })
+      .catch((): { prev: AdjacentPostItem | null; next: AdjacentPostItem | null } => ({
+        prev: null,
+        next: null,
+      })),
   ]);
 
-  // 按发布时间倒序排列计算相邻上下篇，避免置顶影响时间线顺序
-  const chronological = [...allPublished].sort(
-    (a, b) =>
-      new Date(b.published_at ?? b.created_at).getTime() -
-        new Date(a.published_at ?? a.created_at).getTime() || b.id - a.id,
-  );
-  const currentIdx = chronological.findIndex((item) => item.id === post.id);
-  const toAdjacent = (
-    item: (typeof chronological)[number] | undefined,
-  ): AdjacentPostItem | null =>
-    item
-      ? {
-          slug: item.slug,
-          title: item.title,
-          category: item.category,
-          published_at: item.published_at ?? item.created_at,
-        }
-      : null;
-
-  const prevPost = currentIdx > 0 ? toAdjacent(chronological[currentIdx - 1]) : null;
-  const nextPost =
-    currentIdx >= 0 && currentIdx < chronological.length - 1
-      ? toAdjacent(chronological[currentIdx + 1])
-      : null;
+  const prevPost = adjacent.prev;
+  const nextPost = adjacent.next;
 
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",

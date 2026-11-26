@@ -1,4 +1,4 @@
-import { asc, count, eq } from "drizzle-orm";
+import { asc, count, eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "@/server/db/types";
 import { album, photo } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -145,6 +145,38 @@ export function createAlbumsService(db: AppDatabase) {
         .orderBy(asc(photo.sort), asc(photo.id));
 
       return rows.map(toPhoto);
+    },
+
+    async listPhotosByAlbums(
+      albumIds: number[],
+    ): Promise<Map<number, PhotoItem[]>> {
+      const grouped = new Map<number, PhotoItem[]>();
+      if (albumIds.length === 0) return grouped;
+
+      const rows = await db
+        .select({
+          id: photo.id,
+          albumId: photo.albumId,
+          url: photo.url,
+          caption: photo.caption,
+          orientation: photo.orientation,
+          sort: photo.sort,
+          width: photo.width,
+          height: photo.height,
+          bytes: photo.bytes,
+          format: photo.format,
+          createdAt: photo.createdAt,
+        })
+        .from(photo)
+        .where(inArray(photo.albumId, albumIds))
+        .orderBy(asc(photo.albumId), asc(photo.sort), asc(photo.id));
+
+      for (const row of rows) {
+        const list = grouped.get(row.albumId) ?? [];
+        list.push(toPhoto(row));
+        grouped.set(row.albumId, list);
+      }
+      return grouped;
     },
 
     async create(input: CreateAlbumInput): Promise<AlbumItem> {

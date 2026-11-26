@@ -60,6 +60,7 @@ const CHANNEL_ICONS = {
   telegram: MessageCircle,
   email: Mail,
   webhook: Webhook,
+  feishu: Send,
 } satisfies Record<ChannelType, typeof Mail>;
 
 const LEVEL_LABELS: Record<NotificationLevel, string> = {

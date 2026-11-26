@@ -35,6 +35,8 @@ export const post = sqliteTable(
   (t) => [
     index("idx_post_status_published_at").on(t.status, t.publishedAt),
     index("idx_post_category_status").on(t.categoryId, t.status),
+    index("idx_post_list_order").on(t.status, t.isPinned, t.createdAt, t.id),
+    index("idx_post_status_scheduled_at").on(t.status, t.scheduledAt),
   ],
 );
 

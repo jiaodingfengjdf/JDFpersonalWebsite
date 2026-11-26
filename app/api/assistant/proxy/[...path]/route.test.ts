@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mockLoadRuntime = vi.fn();
+const mockGetAdminSession = vi.fn();
 
 vi.mock("@/server/modules/assistant", () => ({
   loadAssistantRuntimeConfig: (...args: unknown[]) => mockLoadRuntime(...args),
+}));
+
+vi.mock("@/server/auth/guard", () => ({
+  getAdminSession: (...args: unknown[]) => mockGetAdminSession(...args),
 }));
 
 import { POST } from "./route";
@@ -14,14 +19,16 @@ describe("POST /api/assistant/proxy/[...path]", () => {
 
   beforeEach(() => {
     mockLoadRuntime.mockReset();
+    mockGetAdminSession.mockReset();
+    mockGetAdminSession.mockResolvedValue({ id: 1, username: "admin" });
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
 
-  it("rejects cross-origin requests with 403", async () => {
-    const req = new NextRequest("http://localhost:3000/api/assistant/proxy/messages", {
+  it("rejects cross-origin or missing-origin requests with 403", async () => {
+    const crossReq = new NextRequest("http://localhost:3000/api/assistant/proxy/messages", {
       method: "POST",
       headers: {
         origin: "https://evil.example.com",
@@ -30,9 +37,38 @@ describe("POST /api/assistant/proxy/[...path]", () => {
       },
       body: JSON.stringify({ model: "deepseek-flash", messages: [] }),
     });
+    const crossRes = await POST(crossReq, { params: Promise.resolve({ path: ["messages"] }) });
+    expect(crossRes.status).toBe(403);
+
+    const noOriginReq = new NextRequest("http://localhost:3000/api/assistant/proxy/messages", {
+      method: "POST",
+      headers: {
+        host: "localhost:3000",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: "deepseek-flash", messages: [] }),
+    });
+    const noOriginRes = await POST(noOriginReq, { params: Promise.resolve({ path: ["messages"] }) });
+    expect(noOriginRes.status).toBe(403);
+  });
+
+  it("rejects anonymous non-admin callers with 401", async () => {
+    mockGetAdminSession.mockResolvedValue(null);
+
+    const req = new NextRequest("http://localhost:3000/api/assistant/proxy/messages", {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:3000",
+        host: "localhost:3000",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: "deepseek-flash", messages: [] }),
+    });
 
     const res = await POST(req, { params: Promise.resolve({ path: ["messages"] }) });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.error?.code).toBe("unauthorized");
   });
 
   it("returns 400 when DeepSeek API key is not configured on server", async () => {
@@ -62,7 +98,7 @@ describe("POST /api/assistant/proxy/[...path]", () => {
     expect(data.error?.code).toBe("no_api_key");
   });
 
-  it("forwards messages with server-decrypted x-api-key without leaking key", async () => {
+  it("forwards messages with server-decrypted x-api-key for authenticated admin", async () => {
     mockLoadRuntime.mockResolvedValue({
       baseUrl: "https://api.deepseek.com",
       apiKey: "sk-secret-deepseek-9999",

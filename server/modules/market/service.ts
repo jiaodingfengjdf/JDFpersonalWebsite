@@ -340,8 +340,8 @@ export function createMarketService(db: AppDatabase) {
         : build(db);
     },
 
-    async overview(): Promise<MarketOverview> {
-      const items = await this.quotes({ record: true });
+    async overview(options: { record?: boolean } = {}): Promise<MarketOverview> {
+      const items = await this.quotes({ record: options.record ?? false });
       const totals: MarketCurrencyTotals[] = (["CNY", "USD"] as const)
         .map((currency) => {
           const held = items.filter(

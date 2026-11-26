@@ -9,7 +9,7 @@ import { getAdminSession } from "@/server/auth/guard";
 import { currentMonth, getLedgerService } from "@/server/modules/ledger";
 import type { LedgerCategory, LedgerTransaction } from "@/server/modules/ledger/contracts";
 import { loadSiteSettings } from "@/server/modules/site-settings";
-import LedgerCharts from "./LedgerCharts";
+import LedgerChartsLazy from "./LedgerChartsLazy";
 import LedgerQuickEntryClient from "./LedgerQuickEntryClient";
 import LedgerTransactionsClient from "./LedgerTransactionsClient";
 
@@ -226,7 +226,7 @@ export default async function LedgerPage({
             </section>
           )}
 
-          <LedgerCharts daily={summary?.daily ?? []} byCategory={summary?.by_category ?? []} />
+          <LedgerChartsLazy daily={summary?.daily ?? []} byCategory={summary?.by_category ?? []} />
 
           {accounts.length > 0 && (
             <section className="mt-6 rounded-2xl border border-white/40 bg-white/45 p-4 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/45">

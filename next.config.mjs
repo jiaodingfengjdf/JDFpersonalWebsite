@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   compress: true,
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "sharp", "nodemailer"],
   outputFileTracingExcludes: {
     "/**/*": [
       "./public/**/*",
@@ -46,6 +46,9 @@ const nextConfig = {
       "@dnd-kit/core",
       "@dnd-kit/sortable",
       "@dnd-kit/utilities",
+      "recharts",
+      "@radix-ui/react-dialog",
+      "@react-three/drei",
     ],
   },
 

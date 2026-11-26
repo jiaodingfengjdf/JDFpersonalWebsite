@@ -2,7 +2,10 @@ import "server-only";
 import { parseSiteSettings, type SiteSettings } from "@/lib/site-settings";
 import { SITE_SETTINGS_CONFIG_KEY } from "@/lib/site-settings";
 import { logError } from "@/server/http/logger";
-import { getSiteConfigService } from "@/server/modules/site-config";
+import {
+  getCachedPublicSiteConfig,
+  getSiteConfigService,
+} from "@/server/modules/site-config";
 import type { SiteSettingsInput } from "./contracts";
 
 export const SITE_SETTINGS_DESCRIPTION = "站点信息 / 外观 / 分享 / 内容 / 云音乐（JSON）";
@@ -15,7 +18,7 @@ export const SITE_SETTINGS_DESCRIPTION = "站点信息 / 外观 / 分享 / 内�
  */
 export async function loadSiteSettings(): Promise<SiteSettings> {
   try {
-    const config = await getSiteConfigService().getPublic();
+    const config = await getCachedPublicSiteConfig();
     return parseSiteSettings(config[SITE_SETTINGS_CONFIG_KEY]);
   } catch (error) {
     logError("Failed to load site settings, falling back to defaults", error);

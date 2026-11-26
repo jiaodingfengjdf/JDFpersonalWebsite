@@ -18,8 +18,9 @@ import type {
   UserBlock,
 } from './types';
 import { AGENT_TEAM, REPLY_STYLES } from './types';
-import type { Memory } from '../agent/types';
-import { buildMemorySection, selectMemoriesForPrompt } from '../agent/memory';
+import type { AgentTask, Memory } from '../agent/types';
+import { buildMemorySection, buildTaskSection, selectMemoriesForPrompt } from '../agent/memory';
+import { skillPromptSection, type Skill } from '../agent/skills';
 import { CLIENT_TOOL_SCHEMAS } from '../agent/tools';
 
 const WEEKDAY_ZH = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -71,6 +72,8 @@ const PERSONAS: Record<PersonaId, string> = {
 
 export interface AgentPromptContext {
   memories: Memory[];
+  tasks?: AgentTask[];
+  skills?: Skill[];
   now: number;
 }
 
@@ -103,6 +106,14 @@ export function buildSystemPrompt(settings: Settings, agent?: AgentPromptContext
   if (agent) {
     const memory = buildMemorySection(selectMemoriesForPrompt(agent.memories));
     if (memory) parts.push(memory);
+    if (agent.tasks && agent.tasks.length > 0) {
+      const taskSection = buildTaskSection(agent.tasks, agent.now);
+      if (taskSection) parts.push(taskSection);
+    }
+    if (agent.skills && agent.skills.length > 0) {
+      const skillSection = skillPromptSection(agent.skills);
+      if (skillSection) parts.push(skillSection);
+    }
   }
   const custom = settings.systemPrompt.trim();
   if (custom) parts.push(`## 用户自定义指令\n${custom}`);

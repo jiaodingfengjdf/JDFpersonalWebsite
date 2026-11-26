@@ -18,7 +18,7 @@ describe("bypassImageOptimization", () => {
     expect(bypassImageOptimization("//cdn.example.com/a.png")).toBe(true);
   });
 
-  it("GitHub 头像仍在可信名单内，继续走优化器", () => {
+  it("GitHub 头像与自有图床仍在可信名单内，继续走优化器", () => {
     expect(
       bypassImageOptimization("https://avatars.githubusercontent.com/u/12345?v=4"),
     ).toBe(false);
@@ -26,9 +26,14 @@ describe("bypassImageOptimization", () => {
       bypassImageOptimization("http://avatars.githubusercontent.com/u/12345"),
     ).toBe(false);
     expect(bypassImageOptimization("//avatars.githubusercontent.com/u/12345")).toBe(false);
-    // 大小写混写也要命中
     expect(
       bypassImageOptimization("https://Avatars.GitHubUserContent.com/u/1"),
+    ).toBe(false);
+    expect(
+      bypassImageOptimization("https://static.hiromu.top/photos/cover.webp"),
+    ).toBe(false);
+    expect(
+      bypassImageOptimization("https://hiromu520.oss-cn-beijing.aliyuncs.com/a.jpg"),
     ).toBe(false);
   });
 
