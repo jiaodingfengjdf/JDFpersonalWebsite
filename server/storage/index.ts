@@ -27,7 +27,7 @@ export interface StoredImage {
 
 /** Local storage root; used when OSS is not configured or for dev uploads. */
 export function getUploadRoot(): string {
-  return path.resolve(env.UPLOAD_DIR ?? "uploads");
+  return path.resolve(/*turbopackIgnore: true*/ env.UPLOAD_DIR ?? "uploads");
 }
 
 export async function storeImageFile(file: File): Promise<StoredImage> {

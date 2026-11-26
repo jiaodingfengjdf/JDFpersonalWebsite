@@ -65,12 +65,12 @@ function parseFileName(name: string): ParsedFile | null {
 
 /** 备份目录；BACKUP_DIR 未配置时与脚本一样落在 ./backups。 */
 export function resolveBackupDir(): string {
-  return path.resolve(env.BACKUP_DIR || "./backups");
+  return path.resolve(/*turbopackIgnore: true*/ env.BACKUP_DIR || "./backups");
 }
 
 /** 数据库文件所在目录，用来读磁盘余量。 */
 function databaseDir(): string {
-  return path.dirname(path.resolve(env.DATABASE_PATH));
+  return path.dirname(path.resolve(/*turbopackIgnore: true*/ env.DATABASE_PATH));
 }
 
 export function readBackupOverview(dir: string = resolveBackupDir()): BackupOverview {
@@ -83,7 +83,7 @@ export function readBackupOverview(dir: string = resolveBackupDir()): BackupOver
 
   let entries: string[] = [];
   try {
-    entries = fs.readdirSync(dir);
+    entries = fs.readdirSync(/*turbopackIgnore: true*/ dir);
   } catch {
     unreadable = true;
   }
@@ -94,7 +94,7 @@ export function readBackupOverview(dir: string = resolveBackupDir()): BackupOver
 
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(path.join(dir, name));
+      stat = fs.statSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, name));
     } catch {
       continue;
     }
@@ -195,7 +195,7 @@ export function deleteBackupGroups(
 
   let entries: string[];
   try {
-    entries = fs.readdirSync(dir);
+    entries = fs.readdirSync(/*turbopackIgnore: true*/ dir);
   } catch (error) {
     throw errors.internal(`备份目录不可读，无法删除：${describeFailure(error)}`);
   }
@@ -223,10 +223,10 @@ export function deleteBackupGroups(
     const removed: string[] = [];
     let bytes = 0;
     for (const name of files) {
-      const target = path.join(dir, name);
+      const target = path.join(/*turbopackIgnore: true*/ dir, name);
       try {
-        const size = fs.statSync(target).size;
-        fs.unlinkSync(target);
+        const size = fs.statSync(/*turbopackIgnore: true*/ target).size;
+        fs.unlinkSync(/*turbopackIgnore: true*/ target);
         bytes += size;
         removed.push(name);
       } catch (error) {
