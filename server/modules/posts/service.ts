@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { runTransaction } from "@/server/db/tx";
 import type { AppDatabase } from "@/server/db/types";
 import { category, post, postDraft, postRevision, postTag, postView, tag } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -722,29 +723,26 @@ export function createPostsService(db: AppDatabase) {
       visitorKey: string,
       day: string,
     ): Promise<{ counted: true; views: number } | { counted: false }> {
-      return db.transaction((tx) => {
-        const article = tx
+      return runTransaction(db, async (tx) => {
+        const [article] = await tx
           .select({ id: post.id })
           .from(post)
           .where(and(eq(post.id, id), inArray(post.status, ["published", "unpublish_scheduled"])))
-          .limit(1)
-          .get();
+          .limit(1);
         if (!article) throw errors.notFound("文章不存在");
 
-        const inserted = tx
+        const [inserted] = await tx
           .insert(postView)
           .values({ postId: id, visitorKey, day })
           .onConflictDoNothing()
-          .returning({ id: postView.id })
-          .get();
+          .returning({ id: postView.id });
         if (!inserted) return { counted: false };
 
-        const updated = tx
+        const [updated] = await tx
           .update(post)
           .set({ views: sql<number>`coalesce(${post.views}, 0) + 1` })
           .where(and(eq(post.id, id), inArray(post.status, ["published", "unpublish_scheduled"])))
-          .returning({ views: post.views })
-          .get();
+          .returning({ views: post.views });
         if (!updated) throw errors.notFound("文章不存在");
         return { counted: true, views: updated.views ?? 0 };
       });

@@ -85,7 +85,7 @@ describe("market alerts", () => {
     expect(updated.rule).toBe("price_below");
     expect(updated.enabled).toBe(false);
 
-    service.markAlertFired(alert.id);
+    await service.markAlertFired(alert.id);
     const [fired] = await service.alerts();
     expect(fired.last_fired_at).not.toBeNull();
 

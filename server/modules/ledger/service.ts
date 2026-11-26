@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, like, lt, or, sql } from "drizzle-orm";
+import { runTransaction } from "@/server/db/tx";
 import type { AppDatabase } from "@/server/db/types";
 import { ledgerAccount, ledgerBudget, ledgerCategory, ledgerTxn } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -360,15 +361,17 @@ export function createLedgerService(db: AppDatabase) {
       if (rows.length === 0) return { inserted: 0, skipped: 0 };
       const now = new Date();
       let inserted = 0;
-      db.transaction((tx) => {
-        const accounts = new Set(tx.select({ id: ledgerAccount.id }).from(ledgerAccount).all().map(({ id }) => id));
-        const categories = new Map(tx.select({ id: ledgerCategory.id, kind: ledgerCategory.kind }).from(ledgerCategory).all().map(({ id, kind }) => [id, kind]));
+      await runTransaction(db, async (tx) => {
+        const accountRows = await tx.select({ id: ledgerAccount.id }).from(ledgerAccount);
+        const categoryRows = await tx.select({ id: ledgerCategory.id, kind: ledgerCategory.kind }).from(ledgerCategory);
+        const accounts = new Set(accountRows.map(({ id }) => id));
+        const categories = new Map(categoryRows.map(({ id, kind }) => [id, kind]));
         for (const input of rows) {
           if (!accounts.has(input.account_id)) throw errors.validation("导入账户不存在");
           if (input.category_id !== null && categories.get(input.category_id) !== input.kind) {
             throw errors.validation("导入分类不存在或与收支类型不匹配");
           }
-          const result = tx
+          const insertedRows = await tx
             .insert(ledgerTxn)
             .values({
               accountId: input.account_id,
@@ -384,8 +387,8 @@ export function createLedgerService(db: AppDatabase) {
               updatedAt: now,
             })
             .onConflictDoNothing({ target: ledgerTxn.externalId })
-            .run();
-          inserted += result.changes;
+            .returning({ id: ledgerTxn.id });
+          inserted += insertedRows.length;
         }
       });
       return { inserted, skipped: rows.length - inserted };

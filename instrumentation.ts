@@ -3,9 +3,12 @@ import { env } from "./server/env";
 /**
  * Next.js calls this once per server start. It boots the in-process alert
  * scheduler so backup/disk/error-rate checks run without an external cron.
+ * Skipped on serverless deployments (Vercel) where long-lived intervals do not apply.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.VERCEL === "1") return;
+
   const { startPostScheduleRunner } = await import(
     "./server/modules/posts/scheduler"
   );

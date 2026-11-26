@@ -24,11 +24,21 @@ const optionalUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const defaultFrontendOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
   DATABASE_PATH: z.string().min(1).default("./data/kirameku.db"),
+  /** Optional Turso / libSQL remote database URL (e.g. libsql://...turso.io). */
+  TURSO_DATABASE_URL: optionalString,
+  /** Optional auth token paired with TURSO_DATABASE_URL. */
+  TURSO_AUTH_TOKEN: optionalString,
   SITE_READ_ONLY: flag,
   AUTH_SECRET: z.string().optional(),
   /** Protects /api/internal/* maintenance endpoints; disabled when unset. */
@@ -36,7 +46,11 @@ const envSchema = z.object({
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
   GITHUB_REDIRECT_URI: optionalUrl,
-  FRONTEND_ORIGIN: z.string().url().default("http://localhost:3000"),
+  FRONTEND_ORIGIN: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().url().default(defaultFrontendOrigin),
+  ),
   /**
    * Canonical public site URL used for sitemap, robots, RSS and share cards.
    * Falls back to FRONTEND_ORIGIN so a normal deployment only sets one value;

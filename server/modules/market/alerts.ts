@@ -86,7 +86,7 @@ export async function evaluateMarketAlerts(): Promise<MarketAlertReport> {
         force: true,
       });
       if (result.sent) {
-        market.markAlertFired(alert.id);
+        await market.markAlertFired(alert.id);
         fired.push(`market.alert:${alert.id}`);
       }
     } catch (error) {

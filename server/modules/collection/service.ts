@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { runTransaction } from "@/server/db/tx";
 import type { AppDatabase } from "@/server/db/types";
 import { bookmarkCategory, collectionItem } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -87,24 +88,27 @@ export function createCollectionService(db: AppDatabase) {
   }
 
   return {
-    importBookmarks(input: BookmarkImportInput) {
+    async importBookmarks(input: BookmarkImportInput) {
       const now = new Date();
-      return db.transaction((tx) => {
-        const existing = new Set(tx.select({ url: collectionItem.url }).from(collectionItem)
-          .where(eq(collectionItem.kind, "link")).all().map(({ url }) => {
-            try {
-              return new URL(url).href;
-            } catch {
-              return url;
-            }
-          }));
+      return runTransaction(db, async (tx) => {
+        const existingRows = await tx
+          .select({ url: collectionItem.url })
+          .from(collectionItem)
+          .where(eq(collectionItem.kind, "link"));
+        const existing = new Set(existingRows.map(({ url }) => {
+          try {
+            return new URL(url).href;
+          } catch {
+            return url;
+          }
+        }));
         let inserted = 0;
         for (const item of input.items) {
           const url = new URL(item.url).href;
           if (existing.has(url)) continue;
-          tx.insert(collectionItem).values({
+          await tx.insert(collectionItem).values({
             kind: "link", title: item.title, url, isPublic: 0, createdAt: now, updatedAt: now,
-          }).run();
+          });
           existing.add(url);
           inserted += 1;
         }

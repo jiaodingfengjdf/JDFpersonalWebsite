@@ -1,4 +1,5 @@
 import { asc, eq, sql } from "drizzle-orm";
+import { runTransaction } from "@/server/db/tx";
 import type { AppDatabase } from "@/server/db/types";
 import { themePreset } from "@/server/db/schema";
 import { errors } from "@/server/http/errors";
@@ -130,12 +131,12 @@ export function createThemesService(db: AppDatabase) {
       const [row] = await db.select().from(themePreset).where(eq(themePreset.id, id)).limit(1);
       if (!row) throw errors.notFound("主题不存在");
 
-      db.transaction((tx) => {
-        tx.update(themePreset).set({ isActive: 0 }).where(eq(themePreset.isActive, 1)).run();
-        tx.update(themePreset)
+      await runTransaction(db, async (tx) => {
+        await tx.update(themePreset).set({ isActive: 0 }).where(eq(themePreset.isActive, 1));
+        await tx
+          .update(themePreset)
           .set({ isActive: 1, updatedAt: new Date() })
-          .where(eq(themePreset.id, id))
-          .run();
+          .where(eq(themePreset.id, id));
       });
 
       const [updated] = await db

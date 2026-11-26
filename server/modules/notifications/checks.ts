@@ -1,4 +1,4 @@
-import { getSqlite } from "@/server/db/client";
+import { getLibsqlClient, getSqlite } from "@/server/db/client";
 import { getMetrics } from "@/server/http/metrics";
 import type { NotificationLevel } from "./contracts";
 import type { NotificationsService, RuleRuntimeState } from "./service";
@@ -279,7 +279,7 @@ function checkDbBusy(
   };
 }
 
-function checkSiteHealth(): CheckOutcome {
+async function checkSiteHealth(): Promise<CheckOutcome> {
   const base: CheckOutcome = {
     eventKey: "site.health",
     triggered: false,
@@ -291,6 +291,12 @@ function checkSiteHealth(): CheckOutcome {
   };
 
   try {
+    if (process.env.TURSO_DATABASE_URL) {
+      const client = getLibsqlClient();
+      await client.execute("SELECT 1");
+      return base;
+    }
+
     const database = getSqlite();
     database.prepare("SELECT 1").get();
     const integrity = database.pragma("quick_check(1)") as Array<{
@@ -378,7 +384,11 @@ export async function runNotificationChecks(
   }
   if (diskState) guarded("disk.low", () => checkDiskLow(diskState));
   if (busyState) guarded("db.busy", () => checkDbBusy(busyState, metrics, previous));
-  guarded("site.health", () => checkSiteHealth());
+  try {
+    outcomes.push(await checkSiteHealth());
+  } catch (error) {
+    errors.push(`site.health: ${describeError(error)}`);
+  }
 
   const triggered: string[] = [];
   for (const outcome of outcomes) {

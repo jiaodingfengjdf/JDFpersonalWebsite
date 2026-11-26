@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createClient } from "@libsql/client/http";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { drizzle as drizzleBetterSqlite } from "drizzle-orm/better-sqlite3";
+import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
 import { hashPassword } from "../server/auth/password";
 import { openDatabase } from "../server/db/open";
 import * as schema from "../server/db/schema";
+import type { AppDatabase } from "../server/db/types";
 
 /**
  * 从 .env.local 补读管理员相关变量（只读 ADMIN_*，不整体加载 env 文件，
@@ -57,13 +60,28 @@ async function main() {
     throw new Error("ADMIN_PASSWORD must not exceed 72 UTF-8 bytes");
   }
 
-  const databasePath = path.resolve(
-    process.env.DATABASE_PATH || "./data/kirameku.db",
-  );
-  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
+  const tursoToken = process.env.TURSO_AUTH_TOKEN?.trim();
 
-  const sqlite = openDatabase(databasePath);
-  const db = drizzle(sqlite, { schema });
+  let db: AppDatabase;
+  let close: () => void;
+
+  if (tursoUrl) {
+    const httpUrl = tursoUrl.startsWith("libsql://")
+      ? `https://${tursoUrl.slice("libsql://".length)}`
+      : tursoUrl;
+    const client = createClient({ url: httpUrl, authToken: tursoToken });
+    db = drizzleLibsql(client, { schema }) as unknown as AppDatabase;
+    close = () => client.close();
+  } else {
+    const databasePath = path.resolve(
+      process.env.DATABASE_PATH || "./data/kirameku.db",
+    );
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+    const sqlite = openDatabase(databasePath);
+    db = drizzleBetterSqlite(sqlite, { schema }) as unknown as AppDatabase;
+    close = () => sqlite.close();
+  }
 
   try {
     const [existing] = await db
@@ -76,31 +94,29 @@ async function main() {
     const now = new Date();
 
     if (existing) {
-      db.update(schema.user)
+      await db
+        .update(schema.user)
         .set({
           hashedPassword,
           nickname,
           isAdmin: true,
           updatedAt: now,
         })
-        .where(eq(schema.user.id, existing.id))
-        .run();
+        .where(eq(schema.user.id, existing.id));
       console.log(`updated admin: ${username}`);
     } else {
-      db.insert(schema.user)
-        .values({
-          username,
-          hashedPassword,
-          nickname,
-          isAdmin: true,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+      await db.insert(schema.user).values({
+        username,
+        hashedPassword,
+        nickname,
+        isAdmin: true,
+        createdAt: now,
+        updatedAt: now,
+      });
       console.log(`created admin: ${username}`);
     }
   } finally {
-    sqlite.close();
+    close();
   }
 }
 
