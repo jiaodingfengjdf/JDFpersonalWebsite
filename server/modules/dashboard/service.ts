@@ -1,6 +1,6 @@
 import { count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
-import { comment, message, post, visitor } from "@/server/db/schema";
+import { chatter, comment, post, visitor } from "@/server/db/schema";
 
 export const dashboardService = {
   async stats() {
@@ -8,7 +8,7 @@ export const dashboardService = {
     const [
       [postRows],
       [commentRows],
-      [messageRows],
+      [chatterRows],
       [visitorRows],
       recentPosts,
     ] = await Promise.all([
@@ -16,16 +16,14 @@ export const dashboardService = {
         .select({ value: count() })
         .from(post)
         .where(inArray(post.status, ["published", "unpublish_scheduled"])),
-      // 评论/留言入库即 approved，后台只会在 approved 与 rejected 间切换，
-      // 所以这里统计「已通过」而不是永远不会增长的「待审核」。
       db
         .select({ value: count() })
         .from(comment)
         .where(eq(comment.status, "approved")),
       db
         .select({ value: count() })
-        .from(message)
-        .where(eq(message.status, "approved")),
+        .from(chatter)
+        .where(eq(chatter.status, "published")),
       db.select({ value: count() }).from(visitor),
       db
         .select({
@@ -44,7 +42,7 @@ export const dashboardService = {
       counts: {
         posts: postRows?.value ?? 0,
         approvedComments: commentRows?.value ?? 0,
-        approvedMessages: messageRows?.value ?? 0,
+        publishedChatters: chatterRows?.value ?? 0,
         visitors: visitorRows?.value ?? 0,
       },
       recentPosts,

@@ -10,7 +10,7 @@ import {
   shareImageUrl,
   siteUrl,
 } from "@/server/site";
-import PostDetailClient from "./PostDetailClient";
+import PostDetailClient, { type AdjacentPostItem } from "./PostDetailClient";
 
 export const revalidate = 60;
 
@@ -31,13 +31,14 @@ export async function generateMetadata({
     const post = await getPost(slug);
     const base = await getSiteUrl();
     const url = siteUrl(`/posts/${post.slug}`, base);
-    // Fall back to the configured site share card for description and image so
-    // a post without a cover still produces a complete preview.
-    const share = await getShareConfig({
-      title: post.title,
-      description: post.description,
-      image: post.cover ? shareImageUrl(post.cover, base) : undefined,
-    }, base);
+    const share = await getShareConfig(
+      {
+        title: post.title,
+        description: post.description,
+        image: post.cover ? shareImageUrl(post.cover, base) : undefined,
+      },
+      base,
+    );
 
     return {
       title: post.title,
@@ -79,13 +80,39 @@ export default async function PostDetailPage({ params }: PageProps) {
   if (!post) notFound();
 
   const { content, ...initialPost } = post;
-  const [{ html: contentHtml, toc }, base] = await Promise.all([
+  const [{ html: contentHtml, toc }, base, allPublished] = await Promise.all([
     renderMarkdownWithToc(content),
     getSiteUrl(),
+    getPostsService()
+      .list({ status: "published", page: 1, size: 100 })
+      .catch(() => []),
   ]);
 
-  // BlogPosting 结构化数据：搜索结果和第三方聚合靠它取标题、封面和发布时间。
-  // 只输出库里的真实字段，不臆造作者/评分等不存在的属性。
+  // 按发布时间倒序排列计算相邻上下篇，避免置顶影响时间线顺序
+  const chronological = [...allPublished].sort(
+    (a, b) =>
+      new Date(b.published_at ?? b.created_at).getTime() -
+        new Date(a.published_at ?? a.created_at).getTime() || b.id - a.id,
+  );
+  const currentIdx = chronological.findIndex((item) => item.id === post.id);
+  const toAdjacent = (
+    item: (typeof chronological)[number] | undefined,
+  ): AdjacentPostItem | null =>
+    item
+      ? {
+          slug: item.slug,
+          title: item.title,
+          category: item.category,
+          published_at: item.published_at ?? item.created_at,
+        }
+      : null;
+
+  const prevPost = currentIdx > 0 ? toAdjacent(chronological[currentIdx - 1]) : null;
+  const nextPost =
+    currentIdx >= 0 && currentIdx < chronological.length - 1
+      ? toAdjacent(chronological[currentIdx + 1])
+      : null;
+
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -104,7 +131,6 @@ export default async function PostDetailPage({ params }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        // JSON.stringify 会转义引号，内容全部来自数据库字段，不存在 </script> 注入面
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <PostDetailClient
@@ -112,6 +138,8 @@ export default async function PostDetailPage({ params }: PageProps) {
         initialPost={initialPost}
         contentHtml={contentHtml}
         toc={toc}
+        prevPost={prevPost}
+        nextPost={nextPost}
       />
     </>
   );

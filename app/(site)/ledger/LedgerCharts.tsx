@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -12,8 +13,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import FilterTabs from "@/components/site/FilterTabs";
 import { formatMoney } from "@/lib/format";
-import type { LedgerSummary } from "@/server/modules/ledger/contracts";
+import type { LedgerKind, LedgerSummary } from "@/server/modules/ledger/contracts";
 
 const COLORS = ["#0284c7", "#f59e0b", "#8b5cf6", "#10b981", "#f43f5e", "#0ea5e9", "#64748b"];
 
@@ -22,22 +24,35 @@ type Props = {
   byCategory: LedgerSummary["by_category"];
 };
 
-/** 支出分类占比，最多展示 6 类，其余合并为「其他」。 */
-function expenseShares(byCategory: LedgerSummary["by_category"]) {
-  const expenses = byCategory
-    .filter((item) => item.kind === "expense" && item.total > 0)
+/** 按收支类型计算分类占比，最多展示 6 类，其余合并为「其他」。 */
+function categoryShares(byCategory: LedgerSummary["by_category"], kind: LedgerKind) {
+  const matched = byCategory
+    .filter((item) => item.kind === kind && item.total > 0)
     .sort((a, b) => b.total - a.total);
-  const top = expenses.slice(0, 6).map((item) => ({
-    name: item.category_name,
+  const grandTotal = matched.reduce((sum, item) => sum + item.total, 0);
+  const top = matched.slice(0, 6).map((item) => ({
+    name: item.category_name || "未分类",
     value: item.total,
+    pct: grandTotal > 0 ? (item.total / grandTotal) * 100 : 0,
   }));
-  const rest = expenses.slice(6).reduce((sum, item) => sum + item.total, 0);
-  if (rest > 0) top.push({ name: "其他", value: Number(rest.toFixed(2)) });
-  return top;
+  const rest = matched.slice(6).reduce((sum, item) => sum + item.total, 0);
+  if (rest > 0) {
+    top.push({
+      name: "其他",
+      value: Number(rest.toFixed(2)),
+      pct: grandTotal > 0 ? (rest / grandTotal) * 100 : 0,
+    });
+  }
+  return { shares: top, allRows: matched, grandTotal };
 }
 
 export default function LedgerCharts({ daily, byCategory }: Props) {
-  const shares = expenseShares(byCategory);
+  const [pieKind, setPieKind] = useState<LedgerKind>("expense");
+
+  const { shares, allRows, grandTotal } = useMemo(
+    () => categoryShares(byCategory, pieKind),
+    [byCategory, pieKind],
+  );
 
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -103,13 +118,15 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
               </ResponsiveContainer>
             </div>
             <details className="mt-3 text-sm text-slate-700 dark:text-slate-200">
-              <summary className="cursor-pointer">查看每日明细</summary>
-              <table className="mt-2 w-full text-left">
+              <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">
+                查看每日明细
+              </summary>
+              <table className="mt-2 w-full text-left text-xs">
                 <thead>
-                  <tr>
-                    <th scope="col">日期</th>
-                    <th scope="col" className="text-right">收入</th>
-                    <th scope="col" className="text-right">支出</th>
+                  <tr className="text-slate-400">
+                    <th scope="col" className="py-1 font-normal">日期</th>
+                    <th scope="col" className="py-1 text-right font-normal">收入</th>
+                    <th scope="col" className="py-1 text-right font-normal">支出</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-500/20">
@@ -131,11 +148,26 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
         aria-labelledby="ledger-category-title"
         className="rounded-2xl border border-white/40 bg-white/45 p-4 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/45"
       >
-        <h2 id="ledger-category-title" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-          支出分类
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="ledger-category-title" className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            {pieKind === "expense" ? "支出构成" : "收入构成"}
+          </h2>
+          <FilterTabs
+            items={[
+              { key: "expense" as const, label: "支出构成" },
+              { key: "income" as const, label: "收入构成" },
+            ]}
+            value={pieKind}
+            onChange={(next) => setPieKind(next)}
+            variant="segmented"
+            aria-label="分类图表收支切换"
+          />
+        </div>
+
         {shares.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">本月还没有支出记录。</p>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+            本月还没有{pieKind === "expense" ? "支出" : "收入"}记录。
+          </p>
         ) : (
           <>
             <div className="mt-2 h-44 text-slate-600 dark:text-slate-300">
@@ -154,11 +186,17 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
                       <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => formatMoney(Number(value))} />
+                  <Tooltip
+                    formatter={(value) => {
+                      const num = Number(value);
+                      const pct = grandTotal > 0 ? ((num / grandTotal) * 100).toFixed(1) : "0.0";
+                      return `${formatMoney(num)} (${pct}%)`;
+                    }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <ul className="mt-2 space-y-1 text-sm">
+            <ul className="mt-2 space-y-1.5 text-sm">
               {shares.map((item, index) => (
                 <li key={item.name} className="flex items-center gap-2">
                   <span
@@ -169,12 +207,42 @@ export default function LedgerCharts({ daily, byCategory }: Props) {
                   <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200">
                     {item.name}
                   </span>
-                  <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
+                  <span className="shrink-0 text-xs tabular-nums text-slate-400">
+                    {item.pct.toFixed(1)}%
+                  </span>
+                  <span className="shrink-0 tabular-nums text-slate-600 dark:text-slate-300">
                     {formatMoney(item.value)}
                   </span>
                 </li>
               ))}
             </ul>
+
+            <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+              <summary className="cursor-pointer text-slate-500 dark:text-slate-400">
+                查看全部分类明细（{allRows.length} 类）
+              </summary>
+              <table className="mt-2 w-full text-left">
+                <thead>
+                  <tr className="text-slate-400">
+                    <th scope="col" className="py-1 font-normal">分类</th>
+                    <th scope="col" className="py-1 text-right font-normal">占比</th>
+                    <th scope="col" className="py-1 text-right font-normal">金额</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-500/20">
+                  {allRows.map((row) => {
+                    const pct = grandTotal > 0 ? (row.total / grandTotal) * 100 : 0;
+                    return (
+                      <tr key={`${row.kind}-${row.category_id ?? "none"}-${row.category_name}`}>
+                        <td className="py-1">{row.category_name || "未分类"}</td>
+                        <td className="py-1 text-right tabular-nums">{pct.toFixed(1)}%</td>
+                        <td className="py-1 text-right tabular-nums">{formatMoney(row.total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </details>
           </>
         )}
       </section>

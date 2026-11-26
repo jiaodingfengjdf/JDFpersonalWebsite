@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- 图片地址来自后台配置或第三方接口，域名不可预知，按 lib/image.ts 的约定绕过 next/image 优化器 */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useSiteSettings } from "@/components/providers/SiteSettingsProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 
@@ -15,10 +16,15 @@ export default function ProfileCard({
   photoCount?: number;
 }) {
   const { profile } = useSiteSettings();
+  const { addToast } = useToast();
+
+  const showToast = (message: string) => {
+    addToast("success", message);
+  };
 
   return (
     <div
-      className="rounded-3xl bg-white/40 dark:bg-slate-800/50 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl p-5 md:p-8 flex flex-col justify-between transition-all duration-700 group relative overflow-hidden w-full h-full min-h-[200px] md:min-h-[280px]"
+      className="rounded-3xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl p-5 md:p-8 flex flex-col justify-between transition-all duration-700 group relative overflow-hidden w-full h-full min-h-[200px] md:min-h-[280px]"
     >
       <div className="flex items-start justify-between relative z-10">
         <div className="flex items-center gap-4 md:gap-6">
@@ -43,20 +49,23 @@ export default function ProfileCard({
       </div>
 
       <div className="flex flex-col md:flex-row items-end md:items-center justify-between mt-4 md:mt-8 gap-4 md:gap-6 relative z-10">
-        <div className="flex gap-6 w-full md:w-auto justify-around md:justify-start">
+        <div className="flex gap-4 sm:gap-6 w-full md:w-auto justify-around md:justify-start">
           <StatItem
+            href="/posts"
             count={postCount}
             label="文章"
             color="text-indigo-600 dark:text-indigo-400"
           />
           <div className="w-px h-10 bg-slate-300/50 dark:bg-slate-700 hidden md:block" />
           <StatItem
+            href="/moments"
             count={chatterCount}
             label="说说"
             color="text-purple-600 dark:text-purple-400"
           />
           <div className="w-px h-10 bg-slate-300/50 dark:bg-slate-700 hidden md:block" />
           <StatItem
+            href="/photowall"
             count={photoCount}
             label="照片"
             color="text-pink-600 dark:text-pink-400"
@@ -71,7 +80,7 @@ export default function ProfileCard({
             <SocialBtn type="email" url={`mailto:${profile.social.email}`} />
           )}
           {profile.social?.wechat && (
-            <SocialBtn type="wechat" url={profile.social.wechat}/>
+            <WechatBtn value={profile.social.wechat} onCopied={() => showToast("已复制微信号")} />
           )}
           {profile.social?.tg && (
             <SocialBtn type="tg" url={profile.social.tg} />
@@ -84,46 +93,82 @@ export default function ProfileCard({
 }
 
 function StatItem({
+  href,
   count,
   label,
   color,
 }: {
+  href: string;
   count: number;
   label: string;
   color: string;
 }) {
   return (
-    <div className="text-center group/stat">
+    <Link
+      href={href}
+      aria-label={`查看${label}（共 ${count} 条）`}
+      className="text-center group/stat rounded-xl px-2 py-1 -mx-2 -my-1 hover:bg-white/40 dark:hover:bg-slate-700/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    >
       <div
         className={`text-xl md:text-2xl font-black ${color} transition-transform group-hover/stat:scale-110`}
       >
         {count}
       </div>
-      <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+      <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover/stat:text-slate-800 dark:group-hover/stat:text-slate-200 uppercase tracking-widest transition-colors">
         {label}
       </div>
-    </div>
+    </Link>
+  );
+}
+
+function WechatBtn({
+  value,
+  onCopied,
+}: {
+  value: string;
+  onCopied: () => void;
+}) {
+  const { addToast } = useToast();
+  const trimmed = value.trim();
+  const isHttpUrl = /^https?:\/\//i.test(trimmed);
+
+  if (isHttpUrl) {
+    return <SocialBtn type="wechat" url={trimmed} />;
+  }
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(trimmed);
+      onCopied();
+    } catch {
+      addToast("info", `微信号：${trimmed}`);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={`点击复制微信号：${trimmed}`}
+      aria-label={`复制微信号 ${trimmed}`}
+      className="w-10 h-10 rounded-xl bg-white/50 dark:bg-slate-700/50 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:scale-125 hover:-translate-y-1 transition-all duration-300 border border-white/40 dark:border-white/10 shadow-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    >
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.27-.027-.407-.03zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z" />
+      </svg>
+    </button>
   );
 }
 
 /** 站点 RSS 源路径，与 app/feed/route.ts 以及 layout 里的 alternate link 保持一致。 */
 const FEED_PATH = "/feed";
 
-/**
- * 首页个人信息卡片上的 RSS 订阅入口。
- *
- * RSS 源是站点自带的 /feed，不需要后台配置。点击后把绝对地址复制到剪贴板，
- * 方便直接粘贴到阅读器；剪贴板不可用（例如非 HTTPS 环境）时退化为在新标签页
- * 打开订阅源。
- */
 function RssSubscribeButton() {
   const { profile } = useSiteSettings();
   const { addToast } = useToast();
   const [copied, setCopied] = useState(false);
 
   const copyFeedUrl = async () => {
-    // 后台配置了「站点对外地址」时优先用它，避免从 localhost / 内网 IP 打开页面时
-    // 把调试地址复制进阅读器；留空才回退到当前 origin。
     const base = profile.url.trim().replace(/\/+$/, "") || window.location.origin;
     const absolute = `${base}${FEED_PATH}`;
     try {
@@ -142,7 +187,7 @@ function RssSubscribeButton() {
       onClick={copyFeedUrl}
       title={copied ? "订阅链接已复制" : "RSS 订阅"}
       aria-label={copied ? "订阅链接已复制" : "RSS 订阅"}
-      className="w-10 h-10 rounded-xl bg-white/50 dark:bg-slate-700/50 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-orange-500 dark:hover:text-orange-400 hover:scale-125 hover:-translate-y-1 transition-all duration-300 border border-white/40 dark:border-white/10 shadow-sm cursor-pointer"
+      className="w-10 h-10 rounded-xl bg-white/50 dark:bg-slate-700/50 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-orange-500 dark:hover:text-orange-400 hover:scale-125 hover:-translate-y-1 transition-all duration-300 border border-white/40 dark:border-white/10 shadow-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
     >
       {copied ? (
         <svg
@@ -200,13 +245,13 @@ function SocialBtn({
       case "wechat":
         return (
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.27-.027-.407-.03zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z"/>
+            <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.27-.027-.407-.03zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z" />
           </svg>
         );
       case "tg":
         return (
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M19.777 4.43a1.5 1.5 0 012.062 1.626l-2.268 13.757c-.22 1.327-1.676 2.088-2.893 1.427-1.018-.553-2.53-1.405-3.89-2.294-.68-.445-2.763-1.87-2.507-2.884.22-.867 3.72-4.125 5.72-6.062.785-.761.427-1.2-.5-.5-2.303 1.738-5.998 4.381-7.22 5.125-1.078.656-1.64.768-2.312.656-1.226-.204-2.363-.52-3.291-.905-1.254-.52-1.193-2.244-.001-2.746l17.1-7.2Z"/>
+            <path d="M19.777 4.43a1.5 1.5 0 012.062 1.626l-2.268 13.757c-.22 1.327-1.676 2.088-2.893 1.427-1.018-.553-2.53-1.405-3.89-2.294-.68-.445-2.763-1.87-2.507-2.884.22-.867 3.72-4.125 5.72-6.062.785-.761.427-1.2-.5-.5-2.303 1.738-5.998 4.381-7.22 5.125-1.078.656-1.64.768-2.312.656-1.226-.204-2.363-.52-3.291-.905-1.254-.52-1.193-2.244-.001-2.746l17.1-7.2Z" />
           </svg>
         );
       default:
@@ -224,7 +269,13 @@ function SocialBtn({
   );
 
   return url ? (
-    <a href={url} target="_blank" rel="noopener noreferrer">
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={type}
+      className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    >
       {content}
     </a>
   ) : (

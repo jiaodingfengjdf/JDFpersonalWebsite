@@ -59,12 +59,9 @@ function metricsOf(overrides: Partial<MetricsSnapshot> = {}): MetricsSnapshot {
 }
 
 /** 内存里的假 SQLite：只要 SELECT 1 与 quick_check 能返回预期值即可。 */
-function fakeSqlite(options: { pendingFriendLinks?: number; quickCheck?: string } = {}) {
+function fakeSqlite(options: { quickCheck?: string } = {}) {
   return {
     prepare(sql: string) {
-      if (sql.includes("friend_link")) {
-        return { get: () => ({ total: options.pendingFriendLinks ?? 0 }) };
-      }
       if (sql.includes("quick_check")) {
         return {
           get: () => ({ quick_check: options.quickCheck ?? "ok" }),
@@ -115,7 +112,6 @@ describe("runNotificationChecks", () => {
       "backup.stale": {},
       "disk.low": {},
       "db.busy": {},
-      "content.pending": {},
     });
 
     const report = await runNotificationChecks(service);
@@ -130,7 +126,6 @@ describe("runNotificationChecks", () => {
       "disk.low",
       "db.busy",
       "site.health",
-      "content.pending",
     ]);
   });
 
@@ -259,17 +254,6 @@ describe("runNotificationChecks", () => {
     expect(outcome?.body).toContain("malformed");
   });
 
-  it("counts only pending friend links for the review alert", async () => {
-    state.sqlite = fakeSqlite({ pendingFriendLinks: 2 });
-    const { service } = stubService({ "content.pending": {} });
-
-    const report = await runNotificationChecks(service);
-
-    expect(report.triggered).toContain("content.pending");
-    const outcome = report.outcomes.find((o) => o.eventKey === "content.pending");
-    expect(outcome?.body).toContain("2 条友链申请");
-  });
-
   it("keeps a failing check from taking down the whole round", async () => {
     state.sqlite = {
       prepare() {
@@ -277,19 +261,14 @@ describe("runNotificationChecks", () => {
       },
       pragma: () => [],
     };
-    const { service } = stubService({ "content.pending": {} });
+    const { service } = stubService({});
 
     const report = await runNotificationChecks(service);
 
-    // 健康检查与友链统计都读 SQLite，两个都应各自降级而不是整轮抛错。
+    // 健康检查读 SQLite 失败时应在内部降级而不是整轮抛错。
     const health = report.outcomes.find((o) => o.eventKey === "site.health");
     expect(health?.triggered).toBe(true);
     expect(health?.body).toContain("database is closed");
-
-    const pending = report.outcomes.find((o) => o.eventKey === "content.pending");
-    expect(pending?.triggered).toBe(false);
-    expect(pending?.detail).toContain("统计失败");
-    // 两个检查都在内部吞掉了异常，所以整轮不该出现未捕获错误。
     expect(report.errors).toEqual([]);
   });
 
@@ -303,11 +282,16 @@ describe("runNotificationChecks", () => {
         latest_file: null,
         latest_age_s: null,
       },
+      disk: {
+        path: "/data",
+        total_bytes: 100 * 1024 ** 3,
+        used_bytes: 99 * 1024 ** 3,
+        available_bytes: 1024 ** 3,
+      },
     });
-    state.sqlite = fakeSqlite({ pendingFriendLinks: 1 });
     const { service } = stubService({
       "backup.stale": {},
-      "content.pending": {},
+      "disk.low": {},
     });
     service.notify = async () => {
       throw new Error("telegram 502");
@@ -316,7 +300,7 @@ describe("runNotificationChecks", () => {
     const report = await runNotificationChecks(service);
 
     expect(report.triggered).toEqual(
-      expect.arrayContaining(["backup.stale", "content.pending"]),
+      expect.arrayContaining(["backup.stale", "disk.low"]),
     );
     expect(report.errors.filter((line) => line.includes("telegram 502"))).toHaveLength(
       2,
@@ -330,7 +314,6 @@ describe("runNotificationChecks", () => {
 
     const keys = report.outcomes.map((outcome) => outcome.eventKey);
     expect(keys).not.toContain("backup.stale");
-    expect(keys).not.toContain("content.pending");
     // 健康检查没有阈值，也不依赖规则行。
     expect(keys).toContain("site.health");
   });

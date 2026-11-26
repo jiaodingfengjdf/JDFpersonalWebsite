@@ -3,6 +3,20 @@ import { z } from "zod";
 export const bookStatus = z.enum(["unread", "reading", "done", "dropped"]);
 export type BookStatus = z.infer<typeof bookStatus>;
 
+export const BOOK_CATEGORIES = [
+  "技术",
+  "文学",
+  "科幻",
+  "社科",
+  "历史",
+  "商业",
+  "哲学",
+  "传记",
+  "设计",
+  "随笔",
+  "其他",
+] as const;
+
 /**
  * Covers are rendered through a plain <img src>, so reject anything that is
  * not a local upload path or an absolute http(s) URL. Local paths are checked
@@ -37,6 +51,7 @@ export function isSafeCoverUrl(value: string): boolean {
 export const bookInput = z.object({
   title: z.string().trim().min(1).max(200),
   author: z.string().trim().max(100).default(""),
+  category: z.string().trim().max(40).default(""),
   status: bookStatus.default("reading"),
   rating: z.coerce.number().int().min(0).max(5).default(0),
   note: z.string().trim().max(2000).default(""),
@@ -54,6 +69,7 @@ export interface LibraryBookView {
   id: number;
   title: string;
   author: string;
+  category: string;
   format: "epub" | "txt" | "cbz";
   cover: string;
   file_url: string;

@@ -69,6 +69,6 @@ export const siteConfig = {
   },
 
   // 分类标题
-  chatterTitle: "留言",
+  chatterTitle: "说说",
   chatterDescription: "生活、技术、随想的碎片记录",
 };

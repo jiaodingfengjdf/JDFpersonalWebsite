@@ -76,7 +76,7 @@ export async function searchCross(db: AppDatabase, query: string): Promise<Cross
     db
       .select()
       .from(libraryBook)
-      .where(matches(libraryBook.title, libraryBook.author))
+      .where(matches(libraryBook.title, libraryBook.author, libraryBook.category, libraryBook.note))
       .orderBy(desc(libraryBook.updatedAt), desc(libraryBook.id))
       .limit(LIMIT),
     db
@@ -146,7 +146,7 @@ export async function searchCross(db: AppDatabase, query: string): Promise<Cross
       kind: "book",
       id: item.id,
       title: item.title,
-      detail: [item.author, item.format.toUpperCase()].filter(Boolean).join(" · "),
+      detail: [item.category, item.author, item.format.toUpperCase()].filter(Boolean).join(" · "),
       href: `/library/${item.id}`,
       updated_at: item.updatedAt?.getTime() ?? 0,
     });

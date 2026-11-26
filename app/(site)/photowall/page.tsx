@@ -32,6 +32,7 @@ async function loadAlbums(): Promise<Album[]> {
       return {
         id: album.id,
         title: album.title,
+        description: album.description,
         updatedAt: album.updated_at,
         photoCount: album.photo_count,
         photos: photos

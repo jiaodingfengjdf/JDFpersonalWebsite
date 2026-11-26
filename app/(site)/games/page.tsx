@@ -2,14 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Gamepad2 } from "lucide-react";
 import AsyncState from "@/components/site/AsyncState";
-import GlassPanel from "@/components/site/GlassPanel";
-import RatingStars from "@/components/site/RatingStars";
 import { interestModuleByHref, type InterestModule } from "@/lib/interest-modules";
 import { getAdminSession } from "@/server/auth/guard";
 import { buildInterestMetadata } from "@/lib/page-metadata";
 import { getGamesService } from "@/server/modules/games";
-import type { GameItemView, GameStatus } from "@/server/modules/games/contracts";
+import { gameStatus, type GameItemView, type GameStatus } from "@/server/modules/games/contracts";
 import { loadSiteSettings } from "@/server/modules/site-settings";
+import GamesClient, { type GameSortMode } from "./GamesClient";
 
 export const dynamic = "force-dynamic";
 
@@ -31,15 +30,21 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-// 四种状态都有对应出口；组标题与后台状态标签统一为「通关 / 弃坑」。
-const GROUPS: Array<{ key: GameStatus; label: string }> = [
-  { key: "playing", label: "在玩" },
-  { key: "done", label: "通关" },
-  { key: "backlog", label: "愿望单" },
-  { key: "dropped", label: "弃坑" },
-];
+export default async function GamesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; platform?: string; q?: string; sort?: string }>;
+}) {
+  const [raw, admin] = await Promise.all([searchParams, getAdminSession()]);
+  const parsedStatus = gameStatus.safeParse(raw.status);
+  const initialStatus: GameStatus | "all" = parsedStatus.success ? parsedStatus.data : "all";
+  const initialPlatform = typeof raw.platform === "string" ? raw.platform.trim().slice(0, 60) : "all";
+  const initialQuery = typeof raw.q === "string" ? raw.q.trim().slice(0, 100) : "";
+  const initialSort: GameSortMode =
+    raw.sort === "hours" || raw.sort === "rating" || raw.sort === "updated"
+      ? raw.sort
+      : "group";
 
-export default async function GamesPage() {
   let items: GameItemView[] = [];
   let failed = false;
   try {
@@ -48,13 +53,13 @@ export default async function GamesPage() {
     console.error("Failed to load games", error);
     failed = true;
   }
-  const admin = await getAdminSession();
+
   const done = items.filter((item) => item.status === "done");
   const totalHours = items.reduce((sum, item) => sum + item.hours, 0);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 relative z-10 sm:px-6 lg:px-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-slate-800 dark:text-white md:text-3xl">
             <Gamepad2 className="h-6 w-6 text-sky-500" />
@@ -84,63 +89,15 @@ export default async function GamesPage() {
           actionLabel="重新加载"
           actionHref={MODULE.href}
         />
-      ) : items.length === 0 ? (
-        <GlassPanel as="p" tone="soft" padding="lg" className="text-center text-sm text-slate-500">
-          还没有记录，去后台「游戏」添加。
-        </GlassPanel>
       ) : (
-        <div className="space-y-6">
-          {GROUPS.map((group) => {
-            const list = items.filter((item) => item.status === group.key);
-            if (list.length === 0) return null;
-            return (
-              <section key={group.key}>
-                <h2 className="mb-2 text-xs font-semibold tracking-wide text-slate-400">
-                  {group.label}（{list.length}）
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {list.map((item) => (
-                    <GlassPanel
-                      key={item.id}
-                      id={`game-${item.id}`}
-                      padding="sm"
-                      className="flex gap-3"
-                    >
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-slate-200/60 dark:bg-slate-700/60">
-                        {item.cover ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- 封面来自上传或外链
-                          <img src={item.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="grid h-full place-items-center text-lg">🎮</div>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                          {item.title}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {[item.platform, item.hours > 0 ? `${item.hours}h` : ""]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          {item.rating > 0 ? (
-                            <>
-                              {item.platform || item.hours > 0 ? " · " : null}
-                              <RatingStars value={item.rating} size="sm" />
-                              <span className="text-slate-400">{item.rating}/5</span>
-                            </>
-                          ) : null}
-                        </p>
-                        {item.note && (
-                          <p className="mt-1 line-clamp-2 text-xs text-slate-600 dark:text-slate-300">{item.note}</p>
-                        )}
-                      </div>
-                    </GlassPanel>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+        <GamesClient
+          items={items}
+          initialStatus={initialStatus}
+          initialPlatform={initialPlatform || "all"}
+          initialQuery={initialQuery}
+          initialSort={initialSort}
+          isAdmin={Boolean(admin)}
+        />
       )}
     </div>
   );

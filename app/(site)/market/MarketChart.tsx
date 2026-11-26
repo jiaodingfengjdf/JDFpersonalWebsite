@@ -22,6 +22,14 @@ const GAP = 12;
 
 const MA_COLORS = ["#f59e0b", "#8b5cf6", "#0ea5e9"] as const;
 const MA_WINDOWS = [5, 10, 20] as const;
+type MaWindow = (typeof MA_WINDOWS)[number];
+type ZoomRange = "30" | "60" | "all";
+
+const ZOOM_OPTIONS: Array<{ key: ZoomRange; label: string }> = [
+  { key: "30", label: "近30根" },
+  { key: "60", label: "近60根" },
+  { key: "all", label: "全部" },
+];
 
 function decimals(value: number): number {
   const abs = Math.abs(value);
@@ -55,8 +63,7 @@ function movingAverage(values: number[], window: number): Array<number | null> {
   return output;
 }
 
-// 横轴刻度：首尾一定包含，中间等距取整。旧实现先按步长铺再补末位，
-// 会在末尾多出相邻的两个刻度（标签叠字）并且丢掉第一个刻度。
+// 横轴刻度：首尾一定包含，中间等距取整。
 function tickIndexes(length: number, count: number): number[] {
   if (length <= 0 || count <= 0) return [];
   if (length <= count) return Array.from({ length }, (_, index) => index);
@@ -99,49 +106,110 @@ function CandleChart({
 }) {
   const { ref, width } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<ZoomRange>("all");
+  const [enabledMas, setEnabledMas] = useState<Record<MaWindow, boolean>>({
+    5: true,
+    10: true,
+    20: true,
+  });
+
+  // 先在全量日线上算好均线，再按缩放窗口切片，避免近30根/近60根左侧丢掉均线预热区间。
+  const { visibleCandles, sliceStart, slicedMas } = useMemo(() => {
+    const allCloses = candles.map((candle) => candle.close);
+    const fullMas = MA_WINDOWS.map((window) => ({
+      window,
+      values: movingAverage(allCloses, window),
+    }));
+    const limit = zoom === "30" ? 30 : zoom === "60" ? 60 : candles.length;
+    const start = Math.max(0, candles.length - limit);
+    return {
+      visibleCandles: candles.slice(start),
+      sliceStart: start,
+      slicedMas: fullMas.map((ma) => ({
+        window: ma.window,
+        values: ma.values.slice(start),
+      })),
+    };
+  }, [candles, zoom]);
 
   const view = useMemo(() => {
     const innerW = Math.max(10, width - AXIS_W - PAD_LEFT);
     let low = Infinity;
     let high = -Infinity;
     let maxVolume = 0;
-    for (const candle of candles) {
+    for (const candle of visibleCandles) {
       low = Math.min(low, candle.low);
       high = Math.max(high, candle.high);
       maxVolume = Math.max(maxVolume, candle.volume);
+    }
+    for (const ma of slicedMas) {
+      if (!enabledMas[ma.window]) continue;
+      for (const val of ma.values) {
+        if (val !== null) {
+          low = Math.min(low, val);
+          high = Math.max(high, val);
+        }
+      }
     }
     if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
     const span = high - low || Math.max(high * 0.02, 0.01);
     const top = high + span * 0.06;
     const bottom = low - span * 0.06;
-    const step = innerW / Math.max(1, candles.length);
+    const step = innerW / Math.max(1, visibleCandles.length);
     const bodyW = Math.max(1.2, Math.min(14, step * 0.62));
     const y = (value: number) => PAD_TOP + ((top - value) / (top - bottom)) * PRICE_H;
     const x = (index: number) => PAD_LEFT + step * (index + 0.5);
 
-    const closes = candles.map((candle) => candle.close);
-    const mas = MA_WINDOWS.map((window) => ({ window, values: movingAverage(closes, window) }));
-
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => top - (top - bottom) * ratio);
 
-    return { innerW, top, bottom, step, bodyW, y, x, maxVolume, mas, ticks };
-  }, [candles, width]);
+    return { innerW, top, bottom, step, bodyW, y, x, maxVolume, ticks };
+  }, [visibleCandles, slicedMas, enabledMas, width]);
 
   if (!view) return <ChartEmpty />;
-  const { y, x, step, bodyW, maxVolume, mas, ticks } = view;
+  const { y, x, step, bodyW, maxVolume, ticks } = view;
+  const activeHover = hover !== null && hover < visibleCandles.length ? hover : null;
 
   return (
     <div ref={ref} className="relative w-full">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <div className="inline-flex items-center gap-1 rounded-full border border-white/40 bg-white/40 p-0.5 dark:border-white/10 dark:bg-slate-800/40" role="group" aria-label="K线区间缩放">
+          {ZOOM_OPTIONS.map((option) => {
+            const active = zoom === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  setZoom(option.key);
+                  setHover(null);
+                }}
+                className={`rounded-full px-2.5 py-0.5 transition focus-visible:outline-2 focus-visible:outline-sky-500 ${
+                  active
+                    ? "bg-sky-500 font-medium text-white"
+                    : "text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-white/10"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <span className="text-slate-400 tabular-nums">
+          当前展示 {visibleCandles.length} / {candles.length} 根
+        </span>
+      </div>
+
       <svg
         width={width}
         height={HEIGHT}
         className="block text-slate-500 dark:text-slate-400"
         role="img"
-        aria-label={`K 线图，共 ${candles.length} 根`}
+        aria-label={`K 线图，共 ${visibleCandles.length} 根`}
         onPointerMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
           const index = Math.floor((event.clientX - rect.left - PAD_LEFT) / step);
-          setHover(index >= 0 && index < candles.length ? index : null);
+          setHover(index >= 0 && index < visibleCandles.length ? index : null);
         }}
         onPointerLeave={() => setHover(null)}
       >
@@ -164,7 +232,7 @@ function CandleChart({
           );
         })}
 
-        {candles.map((candle, index) => {
+        {visibleCandles.map((candle, index) => {
           const color = candle.close >= candle.open ? UP : DOWN;
           const top = y(Math.max(candle.open, candle.close));
           const bottom = y(Math.min(candle.open, candle.close));
@@ -182,7 +250,8 @@ function CandleChart({
           );
         })}
 
-        {mas.map((ma, index) => {
+        {slicedMas.map((ma, index) => {
+          if (!enabledMas[ma.window]) return null;
           const segments: string[] = [];
           let started = false;
           ma.values.forEach((value, position) => {
@@ -197,14 +266,14 @@ function CandleChart({
               d={segments.join(" ")}
               fill="none"
               stroke={MA_COLORS[index]}
-              strokeWidth={1.1}
-              opacity={0.9}
+              strokeWidth={1.2}
+              opacity={0.92}
             />
           );
         })}
 
         <line x1={PAD_LEFT} x2={width - AXIS_W} y1={PAD_TOP + PRICE_H + GAP} y2={PAD_TOP + PRICE_H + GAP} stroke={GRID} />
-        {candles.map((candle, index) => {
+        {visibleCandles.map((candle, index) => {
           const height = maxVolume > 0 ? (candle.volume / maxVolume) * VOL_H : 0;
           return (
             <rect
@@ -219,31 +288,31 @@ function CandleChart({
           );
         })}
 
-        {tickIndexes(candles.length, 5).map((index) => (
+        {tickIndexes(visibleCandles.length, 5).map((index) => (
           <text
             key={`x-${index}`}
             x={x(index)}
             y={HEIGHT - 4}
             fontSize={10}
             fill="currentColor"
-            textAnchor={index === 0 ? "start" : index === candles.length - 1 ? "end" : "middle"}
+            textAnchor={index === 0 ? "start" : index === visibleCandles.length - 1 ? "end" : "middle"}
           >
-            {candleAxisLabel(candles[index].date, period)}
+            {candleAxisLabel(visibleCandles[index].date, period)}
           </text>
         ))}
 
-        {hover !== null && (
+        {activeHover !== null && (
           <>
             <line
-              x1={x(hover)}
-              x2={x(hover)}
+              x1={x(activeHover)}
+              x2={x(activeHover)}
               y1={PAD_TOP}
               y2={PAD_TOP + PRICE_H}
               stroke="currentColor"
               strokeOpacity={0.4}
               strokeDasharray="3 3"
             />
-            <circle cx={x(hover)} cy={y(candles[hover].close)} r={3} fill={MA_COLORS[2]} />
+            <circle cx={x(activeHover)} cy={y(visibleCandles[activeHover].close)} r={3} fill={MA_COLORS[2]} />
           </>
         )}
         <text
@@ -257,32 +326,61 @@ function CandleChart({
         </text>
       </svg>
 
-      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-        {MA_WINDOWS.map((window, index) => (
-          <span key={window} className="flex items-center gap-1">
-            <span className="inline-block h-0.5 w-4" style={{ backgroundColor: MA_COLORS[index] }} />
-            MA{window}
-          </span>
-        ))}
-        <span className="ml-auto">柱体颜色：红涨绿跌</span>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        {MA_WINDOWS.map((window, index) => {
+          const active = enabledMas[window];
+          const hoverVal = activeHover !== null ? slicedMas[index]?.values[activeHover] ?? null : null;
+          return (
+            <button
+              key={window}
+              type="button"
+              aria-pressed={active}
+              onClick={() =>
+                setEnabledMas((prev) => ({
+                  ...prev,
+                  [window]: !prev[window],
+                }))
+              }
+              title={active ? `点击隐藏 MA${window}` : `点击显示 MA${window}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 transition focus-visible:outline-2 focus-visible:outline-sky-500 ${
+                active
+                  ? "border-white/50 bg-white/60 text-slate-700 dark:border-white/15 dark:bg-slate-800/60 dark:text-slate-200"
+                  : "border-transparent bg-slate-500/5 text-slate-400 opacity-55 line-through"
+              }`}
+            >
+              <span
+                className="inline-block h-1.5 w-3 rounded-full"
+                style={{ backgroundColor: MA_COLORS[index] }}
+              />
+              <span>MA{window}</span>
+              {active && hoverVal !== null && (
+                <span className="tabular-nums text-[10px] text-slate-500 dark:text-slate-400">
+                  {hoverVal.toFixed(decimals(hoverVal))}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        <span className="ml-auto">柱体颜色：红涨绿跌（点击均线可开关）</span>
       </div>
 
-      {hover !== null && (
+      {activeHover !== null && (
         <FloatingTooltip
-          left={Math.min(Math.max(8, x(hover) + 12), width - 190)}
-          title={candles[hover].date}
+          left={Math.min(Math.max(8, x(activeHover) + 12), width - 190)}
+          title={visibleCandles[activeHover].date}
           rows={[
-            ["开", priceText(candles[hover].open, unit)],
-            ["高", priceText(candles[hover].high, unit)],
-            ["低", priceText(candles[hover].low, unit)],
-            ["收", priceText(candles[hover].close, unit)],
-            ["量", compactNumber(candles[hover].volume)],
+            ["开", priceText(visibleCandles[activeHover].open, unit)],
+            ["高", priceText(visibleCandles[activeHover].high, unit)],
+            ["低", priceText(visibleCandles[activeHover].low, unit)],
+            ["收", priceText(visibleCandles[activeHover].close, unit)],
+            ["量", compactNumber(visibleCandles[activeHover].volume)],
             [
               "涨跌",
               (() => {
-                const previous = hover > 0 ? candles[hover - 1].close : null;
+                const rawIndex = sliceStart + activeHover;
+                const previous = rawIndex > 0 ? candles[rawIndex - 1].close : null;
                 if (!previous) return "—";
-                const pct = ((candles[hover].close - previous) / previous) * 100;
+                const pct = ((visibleCandles[activeHover].close - previous) / previous) * 100;
                 return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
               })(),
             ],
@@ -344,6 +442,8 @@ function LineChart({
   const avgPath = points.some((point) => point.avg !== undefined)
     ? points.map((point, index) => `${index === 0 ? "M" : "L"}${x(index)},${y(point.avg ?? point.value)}`).join(" ")
     : "";
+
+  const activeHover = hover !== null && hover < points.length ? hover : null;
 
   return (
     <div ref={ref} className="relative w-full">
@@ -445,18 +545,18 @@ function LineChart({
           </text>
         ))}
 
-        {hover !== null && (
+        {activeHover !== null && (
           <>
             <line
-              x1={x(hover)}
-              x2={x(hover)}
+              x1={x(activeHover)}
+              x2={x(activeHover)}
               y1={PAD_TOP}
               y2={PAD_TOP + PRICE_H}
               stroke="currentColor"
               strokeOpacity={0.4}
               strokeDasharray="3 3"
             />
-            <circle cx={x(hover)} cy={y(points[hover].value)} r={3} fill={lineColor} />
+            <circle cx={x(activeHover)} cy={y(points[activeHover].value)} r={3} fill={lineColor} />
           </>
         )}
       </svg>
@@ -475,24 +575,24 @@ function LineChart({
         </div>
       )}
 
-      {hover !== null && (
+      {activeHover !== null && (
         <FloatingTooltip
-          left={Math.min(Math.max(8, x(hover) + 12), width - 190)}
-          title={points[hover].label}
+          left={Math.min(Math.max(8, x(activeHover) + 12), width - 190)}
+          title={points[activeHover].label}
           rows={[
-            ["价格", priceText(points[hover].value, unit, digits)],
-            ...(points[hover].avg !== undefined
-              ? ([["均价", priceText(points[hover].avg as number, unit, digits)]] as Array<[string, string]>)
+            ["价格", priceText(points[activeHover].value, unit, digits)],
+            ...(points[activeHover].avg !== undefined
+              ? ([["均价", priceText(points[activeHover].avg as number, unit, digits)]] as Array<[string, string]>)
               : []),
             ...(prevClose && prevClose > 0
-              ? ([
-                  [
-                    "涨跌",
-                    `${(((points[hover].value - prevClose) / prevClose) * 100).toFixed(2)}%`,
-                  ],
-                ] as Array<[string, string]>)
+              ? (() => {
+                  const pct = ((points[activeHover].value - prevClose) / prevClose) * 100;
+                  return [["涨跌", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`]] as Array<[string, string]>;
+                })()
               : []),
-            ...(points[hover].volume ? ([["量", compactNumber(points[hover].volume as number)]] as Array<[string, string]>) : []),
+            ...(points[activeHover].volume
+              ? ([["量", compactNumber(points[activeHover].volume as number)]] as Array<[string, string]>)
+              : []),
           ]}
         />
       )}
@@ -511,7 +611,7 @@ function FloatingTooltip({
 }) {
   return (
     <div
-      className="pointer-events-none absolute top-2 z-20 w-44 rounded-lg border border-white/40 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/95"
+      className="pointer-events-none absolute top-10 z-20 w-44 rounded-lg border border-white/40 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/95"
       style={{ left }}
     >
       <p className="mb-1 font-medium text-slate-700 dark:text-slate-200">{title}</p>

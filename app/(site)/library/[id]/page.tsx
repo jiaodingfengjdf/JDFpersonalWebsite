@@ -54,6 +54,7 @@ export default async function ReaderPage({ params }: { params: Promise<{ id: str
   if (!book) notFound();
 
   // 与 /api/podcast 隐私策略一致：非管理员不接收服务端保存的阅读进度。
-  const safeBook = admin ? book : { ...book, progress: null };
-  return <Reader book={safeBook} canPersist={Boolean(admin)} />;
+  const isAdmin = Boolean(admin);
+  const safeBook = isAdmin ? book : { ...book, progress: null };
+  return <Reader book={safeBook} canPersist={isAdmin} isAdmin={isAdmin} />;
 }

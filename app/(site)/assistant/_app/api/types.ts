@@ -481,6 +481,8 @@ export interface Conversation {
 }
 
 export interface Settings {
+  displayName: string;
+  welcomeMessage: string;
   apiKey: string;
   baseUrl: string;
   model: string;
@@ -525,6 +527,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  displayName: '私人 AI 助理',
+  welcomeMessage: '有什么可以帮你的？支持深度思考、联网检索与文档解析。',
   apiKey: '',
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-flash',

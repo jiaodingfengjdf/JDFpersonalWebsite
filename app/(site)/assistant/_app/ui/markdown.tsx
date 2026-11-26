@@ -89,12 +89,61 @@ function highlightToHtml(code: string, lang: string): string {
   }
 }
 
+const LANG_DISPLAY: Record<string, string> = {
+  ts: 'TypeScript',
+  typescript: 'TypeScript',
+  tsx: 'TSX',
+  js: 'JavaScript',
+  javascript: 'JavaScript',
+  jsx: 'JSX',
+  py: 'Python',
+  python: 'Python',
+  sh: 'Shell',
+  bash: 'Bash',
+  zsh: 'Shell',
+  shell: 'Shell',
+  powershell: 'PowerShell',
+  ps1: 'PowerShell',
+  json: 'JSON',
+  yaml: 'YAML',
+  yml: 'YAML',
+  toml: 'TOML',
+  html: 'HTML',
+  xml: 'XML',
+  css: 'CSS',
+  scss: 'SCSS',
+  sql: 'SQL',
+  md: 'Markdown',
+  markdown: 'Markdown',
+  go: 'Go',
+  rust: 'Rust',
+  rs: 'Rust',
+  java: 'Java',
+  cpp: 'C++',
+  c: 'C',
+  csharp: 'C#',
+  cs: 'C#',
+  dockerfile: 'Dockerfile',
+  diff: 'Diff',
+  text: 'Plain Text',
+}
+
+function displayLang(label: string): string {
+  const key = label.trim().toLowerCase()
+  return LANG_DISPLAY[key] ?? (label || 'Plain Text')
+}
+
 function buildCodeBlock(code: string, label: string, lang: string): string {
+  const lineCount = code ? code.split('\n').length : 0
+  const prettyLabel = displayLang(label)
   return (
     `<div class="code-block" data-lang="${escapeHtml(label)}">` +
     '<div class="code-head">' +
-    `<span class="code-lang">${escapeHtml(label)}</span>` +
-    '<button class="code-copy" type="button" data-copy>复制</button>' +
+    '<div class="code-head-left">' +
+    `<span class="code-lang">${escapeHtml(prettyLabel)}</span>` +
+    (lineCount > 0 ? `<span class="code-lines">${lineCount} 行</span>` : '') +
+    '</div>' +
+    '<button class="code-copy" type="button" data-copy aria-label="复制代码">复制代码</button>' +
     '</div>' +
     `<pre class="code-pre"><code class="hljs">${highlightToHtml(code, lang)}</code></pre>` +
     '</div>'
@@ -110,6 +159,10 @@ const md = new MarkdownIt({
 
 // 「模糊邮箱」会把 a@b.c 这种非 mailto 文本也变成链接，手机上误触率很高，关掉。
 md.linkify?.set({ fuzzyEmail: false })
+
+// 表格外层包一层横向滚动容器，宽表不会撑破对话气泡或页面布局。
+md.renderer.rules.table_open = () => '<div class="md-table-wrap"><table>'
+md.renderer.rules.table_close = () => '</table></div>'
 
 // 自定义 fence：代码块要带语言栏和复制按钮，mermaid 要留占位给组件渲染。
 md.renderer.rules.fence = (tokens, idx, _options, env): string => {
@@ -135,7 +188,7 @@ md.renderer.rules.fence = (tokens, idx, _options, env): string => {
 }
 
 const SANITIZE_CONFIG = {
-  ADD_ATTR: ['target', 'rel', 'data-lang', 'data-mermaid', 'data-copy'],
+  ADD_ATTR: ['target', 'rel', 'data-lang', 'data-mermaid', 'data-copy', 'aria-label'],
   ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel):/i,
 }
 
@@ -469,11 +522,11 @@ export interface MarkdownProps {
 export default function Markdown({ text, citations, streaming = false, className }: MarkdownProps): ReactElement {
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  // citations 也进依赖：占位符替换是一次性的，引用表变化时必须重建带占位符的 html。
+  // 引用角标的增删更新由下方 useEffect 中的 syncMarks 原地完成，无需重建整段 HTML。
   const html = useMemo(() => {
     const raw = md.render(text ?? '', { streaming } satisfies RenderEnv)
     return DOMPurify.sanitize(raw, SANITIZE_CONFIG)
-  }, [text, citations, streaming])
+  }, [text, streaming])
 
   const handleClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null
@@ -488,16 +541,20 @@ export default function Markdown({ text, citations, streaming = false, className
     // 触感反馈放在手势里，异步复制不影响 iOS 的 vibrate 判定。
     navigator.vibrate?.(10)
 
-    const flash = (label: string): void => {
+    const flash = (label: string, copied: boolean): void => {
       button.textContent = label
+      button.classList.toggle('is-copied', copied)
       window.setTimeout(() => {
-        if (button.isConnected) button.textContent = '复制'
-      }, 1200)
+        if (button.isConnected) {
+          button.textContent = '复制代码'
+          button.classList.remove('is-copied')
+        }
+      }, 1500)
     }
-    flash('已复制')
+    flash('已复制 ✓', true)
 
     void copyPlainText(source).then((ok) => {
-      if (!ok && button.isConnected) flash('复制失败')
+      if (!ok && button.isConnected) flash('复制失败', false)
     })
   }, [])
 

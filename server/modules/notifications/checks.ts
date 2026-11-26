@@ -63,25 +63,6 @@ function hours(seconds: number): string {
   return `${round(seconds / 3600)} 小时`;
 }
 
-/**
- * 只统计友链申请：评论和留言入库即为 approved，后台没有「待审核」这一步，
- * 以前那两个分支永远返回 0，把真正的待办数量稀释了。
- */
-function pendingContent() {
-  const database = getSqlite();
-  const friendLinks = Number(
-    (
-      database
-        .prepare(
-          `SELECT count(*) AS total FROM "friend_link" WHERE "is_approved" = 0`,
-        )
-        .get() as { total: number }
-    ).total,
-  );
-
-  return { friendLinks, total: friendLinks };
-}
-
 function checkBackupStale(state: RuleRuntimeState): CheckOutcome {
   const maxAgeHours = state.thresholds.maxAgeHours ?? 30;
   const metrics = getMetrics();
@@ -339,41 +320,6 @@ function checkSiteHealth(): CheckOutcome {
   return base;
 }
 
-function checkContentPending(state: RuleRuntimeState): CheckOutcome {
-  const minCount = state.thresholds.minCount ?? 1;
-  const base: CheckOutcome = {
-    eventKey: "content.pending",
-    triggered: false,
-    level: "info",
-    title: "有待审核的友链申请",
-    body: "",
-    fields: [],
-    detail: "没有待审核的友链申请",
-  };
-
-  let counts: ReturnType<typeof pendingContent>;
-  try {
-    counts = pendingContent();
-  } catch (error) {
-    return { ...base, detail: `统计失败：${describeError(error).slice(0, 80)}` };
-  }
-
-  if (counts.total < minCount) {
-    return { ...base, detail: `待审核友链 ${counts.total} 条` };
-  }
-
-  return {
-    ...base,
-    triggered: true,
-    body: `当前有 ${counts.friendLinks} 条友链申请等待审核，去后台处理一下吧。`,
-    fields: [
-      { label: "友链申请", value: String(counts.friendLinks) },
-      { label: "触发阈值", value: String(minCount) },
-    ],
-    detail: `待审核友链 ${counts.friendLinks} 条`,
-  };
-}
-
 /**
  * Evaluate every alert that has a rule, then hand the triggered ones to the
  * notification service (which owns the cooldown and the delivery log).
@@ -384,14 +330,13 @@ export async function runNotificationChecks(
   const outcomes: CheckOutcome[] = [];
   const errors: string[] = [];
 
-  const [errorState, notFoundState, busyState, backupState, diskState, pendingState] =
+  const [errorState, notFoundState, busyState, backupState, diskState] =
     await Promise.all([
       service.getRuleState("http.error_rate"),
       service.getRuleState("http.not_found_burst"),
       service.getRuleState("db.busy"),
       service.getRuleState("backup.stale"),
       service.getRuleState("disk.low"),
-      service.getRuleState("content.pending"),
     ]);
 
   const metrics = getMetrics();
@@ -434,9 +379,6 @@ export async function runNotificationChecks(
   if (diskState) guarded("disk.low", () => checkDiskLow(diskState));
   if (busyState) guarded("db.busy", () => checkDbBusy(busyState, metrics, previous));
   guarded("site.health", () => checkSiteHealth());
-  if (pendingState) {
-    guarded("content.pending", () => checkContentPending(pendingState));
-  }
 
   const triggered: string[] = [];
   for (const outcome of outcomes) {

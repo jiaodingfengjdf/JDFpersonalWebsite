@@ -7,9 +7,7 @@ import {
   Home,
   BookOpen,
   MessageSquare,
-  Newspaper,
   FolderGit2,
-  Users,
   Camera,
   Clock,
   Music,
@@ -23,32 +21,53 @@ interface RadialItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  ring: "inner" | "outer";
 }
 
-/** 基础栏目 + 从单一事实来源派生的兴趣模块（搜索地址统一为 /search）。 */
-const navItems: RadialItem[] = [
-  { href: "/", label: "首页", icon: Home },
-  { href: "/posts", label: "文章", icon: BookOpen },
-  { href: "/moments", label: "说说", icon: MessageSquare },
-  { href: "/messages", label: "留言", icon: Newspaper },
-  { href: "/bookmark", label: "收藏", icon: Bookmark },
-  { href: "/projects", label: "项目", icon: FolderGit2 },
-  { href: "/friends", label: "友链", icon: Users },
-  { href: "/photowall", label: "照片墙", icon: Camera },
-  { href: "/timeline", label: "归档", icon: Clock },
-  { href: "/music", label: "音乐", icon: Music },
-  ...INTEREST_MODULES.map((module) => ({
-    href: module.href,
-    label: module.label,
-    icon: navDropdownIcons[module.icon],
-  })),
+const coreItems: RadialItem[] = [
+  { href: "/", label: "首页", icon: Home, ring: "inner" },
+  { href: "/posts", label: "文章", icon: BookOpen, ring: "inner" },
+  { href: "/moments", label: "说说", icon: MessageSquare, ring: "inner" },
+  { href: "/bookmark", label: "收藏", icon: Bookmark, ring: "inner" },
+  { href: "/projects", label: "项目", icon: FolderGit2, ring: "inner" },
+  { href: "/photowall", label: "照片墙", icon: Camera, ring: "inner" },
+  { href: "/timeline", label: "归档", icon: Clock, ring: "inner" },
+  { href: "/music", label: "音乐", icon: Music, ring: "inner" },
 ];
+
+const interestItems: RadialItem[] = INTEREST_MODULES.map((module) => ({
+  href: module.href,
+  label: module.label,
+  icon: navDropdownIcons[module.icon],
+  ring: "outer",
+}));
+
+/** 双环径向导航：内圈 8 个核心栏目（r=108px），外圈兴趣模块（r=190px）。 */
+const navItems: RadialItem[] = [...coreItems, ...interestItems];
+
+const INNER_RADIUS = 108;
+const OUTER_RADIUS = 190;
+const DEAD_ZONE_RADIUS = 30;
+const RING_BOUNDARY_RADIUS = (INNER_RADIUS + OUTER_RADIUS) / 2;
 
 const INTERACTIVE_SELECTOR =
   'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [tabindex]:not([tabindex="-1"])';
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(INTERACTIVE_SELECTOR));
+}
+
+function getItemPosition(index: number, cx: number, cy: number) {
+  const isInner = index < coreItems.length;
+  const ringIndex = isInner ? index : index - coreItems.length;
+  const ringCount = isInner ? coreItems.length : interestItems.length;
+  const radius = isInner ? INNER_RADIUS : OUTER_RADIUS;
+  const angle = (ringIndex / ringCount) * 2 * Math.PI - Math.PI / 2;
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius,
+    isInner,
+  };
 }
 
 export default function RadialMenu() {
@@ -59,43 +78,113 @@ export default function RadialMenu() {
   const [center, setCenter] = useState({ x: 0, y: 0 });
   const lastMouse = useRef({ x: 0, y: 0 });
   const shortcutArmed = useRef(false);
-  const RADIUS = 140;
 
-  const getActiveIndex = useCallback((mouseX: number, mouseY: number) => {
-    const distFromCenter = Math.hypot(mouseX - center.x, mouseY - center.y);
-    if (distFromCenter < 30) return -1;
-    let minDist = Infinity;
-    let closest = -1;
-    navItems.forEach((_, i) => {
-      const angle = (i / navItems.length) * 2 * Math.PI - Math.PI / 2;
-      const ix = center.x + Math.cos(angle) * RADIUS;
-      const iy = center.y + Math.sin(angle) * RADIUS;
-      const d = Math.hypot(mouseX - ix, mouseY - iy);
-      if (d < minDist) { minDist = d; closest = i; }
-    });
-    return closest;
-  }, [center.x, center.y]);
+  const getActiveIndex = useCallback(
+    (mouseX: number, mouseY: number) => {
+      const distFromCenter = Math.hypot(mouseX - center.x, mouseY - center.y);
+      if (distFromCenter < DEAD_ZONE_RADIUS) return -1;
+
+      const selectOuter = distFromCenter >= RING_BOUNDARY_RADIUS && interestItems.length > 0;
+      const startIdx = selectOuter ? coreItems.length : 0;
+      const endIdx = selectOuter ? navItems.length : coreItems.length;
+
+      let minDist = Infinity;
+      let closest = -1;
+      for (let i = startIdx; i < endIdx; i++) {
+        const pos = getItemPosition(i, center.x, center.y);
+        const d = Math.hypot(mouseX - pos.x, mouseY - pos.y);
+        if (d < minDist) {
+          minDist = d;
+          closest = i;
+        }
+      }
+      return closest;
+    },
+    [center.x, center.y],
+  );
+
+  const closeMenu = useCallback(() => {
+    shortcutArmed.current = false;
+    setOpen(false);
+    setActiveIndex(-1);
+  }, []);
+
+  const navigateToIndex = useCallback(
+    (index: number) => {
+      const target = navItems[index];
+      closeMenu();
+      if (target) {
+        router.push(target.href);
+      }
+    },
+    [closeMenu, router],
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Tab 属于键盘可访问性的基础导航，绝不劫持。
+      if (open) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          closeMenu();
+          return;
+        }
+        if (e.key === "ArrowRight" || (e.key === "Tab" && !e.shiftKey)) {
+          e.preventDefault();
+          setActiveIndex((prev) => (prev + 1) % navItems.length);
+          return;
+        }
+        if (e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey)) {
+          e.preventDefault();
+          setActiveIndex((prev) => (prev <= 0 ? navItems.length - 1 : prev - 1));
+          return;
+        }
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          setActiveIndex((prev) => {
+            if (prev < 0) return 0;
+            if (prev < coreItems.length) {
+              const mapped = Math.min(coreItems.length + prev, navItems.length - 1);
+              return mapped;
+            }
+            return Math.min(prev - coreItems.length, coreItems.length - 1);
+          });
+          return;
+        }
+        if (e.key === "Enter" && activeIndex >= 0) {
+          e.preventDefault();
+          navigateToIndex(activeIndex);
+          return;
+        }
+      }
+
+      // 未打开时绝不劫持 Tab，且让 Ctrl/⌘ + Shift + K 留给全局命令面板。
       if (e.key === "Tab") return;
-      const isShortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+      const isShortcut =
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "k";
       if (!isShortcut) return;
-      // 输入框、按钮、链接等交互元素上聚焦时不抢快捷键。
+
       if (
         isInteractiveTarget(e.target) ||
         isInteractiveTarget(document.activeElement)
       ) {
         return;
       }
+
       e.preventDefault();
       shortcutArmed.current = true;
-      if (!e.repeat && lastMouse.current) {
+      if (!e.repeat) {
+        const hasMouse = lastMouse.current.x > 0 || lastMouse.current.y > 0;
+        const rawX = hasMouse ? lastMouse.current.x : window.innerWidth / 2;
+        const rawY = hasMouse ? lastMouse.current.y : window.innerHeight / 2;
+        setCenter({ x: rawX, y: rawY });
         setOpen(true);
-        setCenter({ x: lastMouse.current.x, y: lastMouse.current.y });
       }
     };
+
     const handleKeyUp = (e: KeyboardEvent) => {
       if (!shortcutArmed.current) return;
       if (e.key.toLowerCase() !== "k" && e.key !== "Control" && e.key !== "Meta") {
@@ -108,6 +197,7 @@ export default function RadialMenu() {
       setOpen(false);
       setActiveIndex(-1);
     };
+
     const handleMouseMove = (e: MouseEvent) => {
       lastMouse.current = { x: e.clientX, y: e.clientY };
       if (open) {
@@ -123,11 +213,15 @@ export default function RadialMenu() {
       window.removeEventListener("keyup", handleKeyUp, { capture: true });
       window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [open, activeIndex, getActiveIndex, router]);
+  }, [open, activeIndex, getActiveIndex, closeMenu, navigateToIndex, router]);
 
   useEffect(() => {
     if (open && activeIndex >= 0) {
-      window.dispatchEvent(new CustomEvent("radial-nav-hover", { detail: { label: navItems[activeIndex].label } }));
+      window.dispatchEvent(
+        new CustomEvent("radial-nav-hover", {
+          detail: { label: navItems[activeIndex].label },
+        }),
+      );
     }
   }, [open, activeIndex]);
 
@@ -135,6 +229,7 @@ export default function RadialMenu() {
 
   const cx = center.x;
   const cy = center.y;
+  const activeItem = activeIndex >= 0 ? navItems[activeIndex] : null;
 
   return (
     <AnimatePresence>
@@ -144,64 +239,133 @@ export default function RadialMenu() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[9999] pointer-events-none"
-          style={{ background: "rgba(0,0,0,0.3)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="双环快捷导航"
+          onClick={closeMenu}
+          className="fixed inset-0 z-[9999] bg-slate-950/45 backdrop-blur-[2px]"
         >
-          {/* 中心圆 */}
+          {/* 外环轨道辅助线 */}
           <div
-            className="absolute rounded-full bg-white/20 dark:bg-white/10 backdrop-blur-sm border border-white/30"
+            className="pointer-events-none absolute rounded-full border border-white/20 dark:border-white/15"
             style={{
-              left: cx - 30,
-              top: cy - 30,
-              width: 60,
-              height: 60,
+              left: cx - OUTER_RADIUS,
+              top: cy - OUTER_RADIUS,
+              width: OUTER_RADIUS * 2,
+              height: OUTER_RADIUS * 2,
             }}
           />
 
-          {/* 径向菜单项 */}
+          {/* 内环轨道辅助线 */}
+          <div
+            className="pointer-events-none absolute rounded-full border border-sky-300/30 dark:border-sky-400/20"
+            style={{
+              left: cx - INNER_RADIUS,
+              top: cy - INNER_RADIUS,
+              width: INNER_RADIUS * 2,
+              height: INNER_RADIUS * 2,
+            }}
+          />
+
+          {/* 中心指示核 */}
+          <div
+            className="pointer-events-none absolute flex flex-col items-center justify-center rounded-full border border-white/40 bg-white/85 px-2 text-center shadow-lg backdrop-blur-md dark:border-white/15 dark:bg-slate-900/85"
+            style={{
+              left: cx - 38,
+              top: cy - 38,
+              width: 76,
+              height: 76,
+            }}
+          >
+            <span className="max-w-[64px] truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
+              {activeItem ? activeItem.label : "快捷导航"}
+            </span>
+            <span className="text-[10px] text-sky-600 dark:text-sky-400">
+              {activeItem
+                ? activeItem.ring === "inner"
+                  ? "核心栏目"
+                  : "兴趣模块"
+                : "内圈 · 外圈"}
+            </span>
+          </div>
+
+          {/* 双环菜单项 */}
           {navItems.map((item, i) => {
-            const angle = (i / navItems.length) * 2 * Math.PI - Math.PI / 2;
-            const x = cx + Math.cos(angle) * RADIUS;
-            const y = cy + Math.sin(angle) * RADIUS;
+            const { x, y, isInner } = getItemPosition(i, cx, cy);
             const isActive = i === activeIndex;
+            const isCurrentRoute =
+              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const Icon = item.icon;
+            const tileHalf = isInner ? 24 : 26;
 
             return (
-              <motion.div
+              <motion.button
+                type="button"
                 key={item.href}
-                initial={{ scale: 0, x: cx, y: cy }}
-                animate={{ scale: 1, x: x - 32, y: y - 32 }}
-                exit={{ scale: 0, x: cx, y: cy }}
-                transition={{ type: "spring", stiffness: 400, damping: 25, delay: i * 0.02 }}
+                initial={{ scale: 0, x: cx - tileHalf, y: cy - tileHalf }}
+                animate={{ scale: 1, x: x - tileHalf, y: y - tileHalf }}
+                exit={{ scale: 0, x: cx - tileHalf, y: cy - tileHalf }}
+                transition={{
+                  type: "spring",
+                  stiffness: 420,
+                  damping: 26,
+                  delay: (i % 10) * 0.015,
+                }}
                 data-radial-nav={item.label}
-                className="absolute flex flex-col items-center gap-1 pointer-events-auto"
+                onMouseEnter={() => setActiveIndex(i)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigateToIndex(i);
+                }}
+                className="absolute flex flex-col items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded-2xl cursor-pointer"
               >
                 <div
-                  className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-100 ${
+                  className={`${
+                    isInner ? "w-12 h-12" : "w-[52px] h-[52px]"
+                  } rounded-2xl flex items-center justify-center border transition-all duration-100 ${
                     isActive
-                      ? "bg-sky-500 shadow-lg shadow-sky-500/50 scale-110"
-                      : "bg-white/80 dark:bg-slate-800/80 backdrop-blur-md"
+                      ? "bg-sky-600 border-sky-300 shadow-lg shadow-sky-500/50 scale-115"
+                      : isCurrentRoute
+                        ? "bg-sky-50/90 dark:bg-sky-950/85 border-sky-400/60 backdrop-blur-md"
+                        : "bg-white/85 dark:bg-slate-900/85 border-white/40 dark:border-white/15 backdrop-blur-md hover:bg-white dark:hover:bg-slate-800"
                   }`}
                 >
-                  <Icon className={`w-6 h-6 ${isActive ? "text-white" : "text-slate-600 dark:text-slate-300"}`} />
+                  <Icon
+                    className={`w-5 h-5 ${
+                      isActive
+                        ? "text-white"
+                        : isCurrentRoute
+                          ? "text-sky-600 dark:text-sky-400"
+                          : "text-slate-700 dark:text-slate-200"
+                    }`}
+                  />
                 </div>
                 <span
-                  className={`text-xs font-medium whitespace-nowrap transition-all duration-100 z-10 ${
-                    isActive ? "text-white scale-110" : "text-white/70"
+                  className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap transition-all duration-100 ${
+                    isActive
+                      ? "bg-sky-600 text-white shadow scale-105"
+                      : "bg-slate-900/55 text-white/90 backdrop-blur-xs"
                   }`}
                 >
                   {item.label}
                 </span>
-              </motion.div>
+              </motion.button>
             );
           })}
 
-          {/* 提示文字 */}
+          {/* 底部操作提示 */}
           <div
-            className="absolute text-white/60 text-sm"
-            style={{ left: cx, top: cy + RADIUS + 60, transform: "translateX(-50%)" }}
+            className="pointer-events-none absolute rounded-full border border-white/20 bg-slate-900/75 px-3.5 py-1 text-xs text-white/85 backdrop-blur-md whitespace-nowrap"
+            style={{
+              left: cx,
+              top: Math.min(
+                typeof window !== "undefined" ? window.innerHeight - 40 : cy + OUTER_RADIUS + 48,
+                cy + OUTER_RADIUS + 48,
+              ),
+              transform: "translateX(-50%)",
+            }}
           >
-            松开 Ctrl / ⌘ + K 跳转
+            松开 Ctrl / ⌘ + K 跳转 · ← / → / Tab 切换 · Esc 取消
           </div>
         </motion.div>
       )}

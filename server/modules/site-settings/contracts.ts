@@ -88,10 +88,10 @@ export const siteSettingsInput = z.object({
     card: z.enum(["summary", "summary_large_image"]).default("summary_large_image"),
   }),
   content: z.object({
-    chatterTitle: requiredText(SITE_SETTINGS_LIMITS.chatterTitle, "留言板标题"),
+    chatterTitle: requiredText(SITE_SETTINGS_LIMITS.chatterTitle, "说说页标题"),
     chatterDescription: optionalText(
       SITE_SETTINGS_LIMITS.chatterDescription,
-      "留言板描述",
+      "说说页描述",
     ),
     footerBadges: z
       .array(

@@ -12,6 +12,7 @@ function toView(book: BookRow, progress: ProgressRow | undefined): LibraryBookVi
     id: book.id,
     title: book.title,
     author: book.author,
+    category: book.category ?? "",
     format: book.format as LibraryBookView["format"],
     cover: book.cover,
     file_url: book.fileUrl,
@@ -53,11 +54,15 @@ export function createLibraryService(db: AppDatabase) {
     async create(input: {
       title: string;
       author: string;
+      category?: string;
       format: "epub" | "txt" | "cbz";
       fileUrl: string;
       bytes: number;
       totalUnits: number;
       cover: string;
+      status?: LibraryBookView["status"];
+      rating?: number;
+      note?: string;
     }) {
       const now = new Date();
       const [row] = await db
@@ -65,11 +70,15 @@ export function createLibraryService(db: AppDatabase) {
         .values({
           title: input.title,
           author: input.author,
+          category: input.category?.trim() ?? "",
           format: input.format,
           fileUrl: input.fileUrl,
           bytes: input.bytes,
           totalUnits: input.totalUnits,
           cover: input.cover,
+          status: input.status ?? "reading",
+          rating: input.rating ?? 0,
+          note: input.note ?? "",
           createdAt: now,
           updatedAt: now,
         })
@@ -80,7 +89,15 @@ export function createLibraryService(db: AppDatabase) {
 
     async update(
       id: number,
-      input: { title: string; author: string; status: string; rating: number; note: string; cover: string },
+      input: {
+        title: string;
+        author: string;
+        category: string;
+        status: string;
+        rating: number;
+        note: string;
+        cover: string;
+      },
     ) {
       await db
         .update(libraryBook)

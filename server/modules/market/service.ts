@@ -22,6 +22,7 @@ import {
   intradayTrends,
   quotesBySecids,
   resolveUsSecid,
+  searchMarketSymbols,
   type EmQuote,
 } from "./eastmoney";
 import { aggregateCandles, aggregateNav, SERIES_LIMIT, takeLast, toCandle } from "./series";
@@ -41,6 +42,17 @@ interface LiveQuote {
   time: string;
   stale: boolean;
   name?: string;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  prevClose?: number | null;
+  volume?: number | null;
+  amount?: number | null;
+  amplitude?: number | null;
+  turnoverRate?: number | null;
+  pe?: number | null;
+  pb?: number | null;
+  marketCap?: number | null;
 }
 
 /** 存量记录的 secid 为空，按代码推导；美股必须有 secid 才能取数。 */
@@ -159,6 +171,17 @@ export function createMarketService(db: AppDatabase) {
       market_value: hasHolding && price > 0 ? round2(price * shares) : null,
       profit: hasHolding && price > 0 ? round2((price - cost) * shares) : null,
       profit_pct: hasHolding && price > 0 && cost > 0 ? round2(((price - cost) / cost) * 100) : null,
+      open: live?.open ?? null,
+      high: live?.high ?? null,
+      low: live?.low ?? null,
+      prev_close: live?.prevClose ?? null,
+      volume: live?.volume ?? null,
+      amount: live?.amount ?? null,
+      amplitude: live?.amplitude ?? null,
+      turnover_rate: live?.turnoverRate ?? null,
+      pe: live?.pe ?? null,
+      pb: live?.pb ?? null,
+      market_cap: live?.marketCap ?? null,
     };
   }
 
@@ -220,6 +243,17 @@ export function createMarketService(db: AppDatabase) {
                     time: hit.updatedAt ? dateTime.format(hit.updatedAt) : "",
                     stale: indexResult.stale,
                     name: hit.name,
+                    open: hit.open,
+                    high: hit.high,
+                    low: hit.low,
+                    prevClose: hit.prevClose > 0 ? hit.prevClose : null,
+                    volume: hit.volume,
+                    amount: hit.amount,
+                    amplitude: hit.amplitude,
+                    turnoverRate: hit.turnoverRate,
+                    pe: hit.pe,
+                    pb: hit.pb,
+                    marketCap: hit.marketCap,
                   }
                 : undefined,
               record,
@@ -238,6 +272,17 @@ export function createMarketService(db: AppDatabase) {
                     time: hit.updatedAt ? dateTime.format(hit.updatedAt) : "",
                     stale: usResult.stale,
                     name: hit.name,
+                    open: hit.open,
+                    high: hit.high,
+                    low: hit.low,
+                    prevClose: hit.prevClose > 0 ? hit.prevClose : null,
+                    volume: hit.volume,
+                    amount: hit.amount,
+                    amplitude: hit.amplitude,
+                    turnoverRate: hit.turnoverRate,
+                    pe: hit.pe,
+                    pb: hit.pb,
+                    marketCap: hit.marketCap,
                   }
                 : undefined,
               record,
@@ -255,6 +300,17 @@ export function createMarketService(db: AppDatabase) {
                   time: hit.quote.time,
                   stale: hit.stale,
                   name: hit.quote.name,
+                  open: hit.quote.open,
+                  high: hit.quote.high,
+                  low: hit.quote.low,
+                  prevClose: hit.quote.prevClose,
+                  volume: hit.quote.volume,
+                  amount: hit.quote.amount,
+                  amplitude: hit.quote.amplitude,
+                  turnoverRate: hit.quote.turnoverRate,
+                  pe: hit.quote.pe,
+                  pb: hit.quote.pb,
+                  marketCap: hit.quote.marketCap,
                 }
               : undefined,
             record,
@@ -300,7 +356,7 @@ export function createMarketService(db: AppDatabase) {
       };
     },
 
-    /** 顶部指数条：固定 A 股 + 美股核心指数，与自选指数共用同一批快照。 */
+    /** 顶部指数条：固定 A 股 + 港股 + 美股核心指数，与自选指数共用同一批快照。 */
     async indices(): Promise<MarketIndexItem[]> {
       const watches = await listWatches();
       const { quotes, stale } = await loadIndexQuotes(watches);
@@ -314,8 +370,25 @@ export function createMarketService(db: AppDatabase) {
           change: hit?.change ?? 0,
           change_pct: hit?.changePct ?? 0,
           stale: !hit || stale,
+          open: hit?.open ?? null,
+          high: hit?.high ?? null,
+          low: hit?.low ?? null,
+          amount: hit?.amount ?? null,
+          amplitude: hit?.amplitude ?? null,
         };
       });
+    },
+
+    async search(query: string) {
+      const [candidates, watches] = await Promise.all([
+        searchMarketSymbols(query),
+        listWatches(),
+      ]);
+      const watchMap = new Map(watches.map((w) => [`${w.kind}:${w.code}`, w.id]));
+      return candidates.map((item) => ({
+        ...item,
+        watch_id: watchMap.get(`${item.kind}:${item.code}`) ?? null,
+      }));
     },
 
     async history(id: number, period: MarketPeriod): Promise<MarketHistory> {

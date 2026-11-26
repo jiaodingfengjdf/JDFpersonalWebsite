@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Lock } from "lucide-react";
 import AsyncState from "@/components/site/AsyncState";
-import { formatMoney, formatMonthDay } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { interestModuleByHref, type InterestModule } from "@/lib/interest-modules";
 import { buildInterestMetadata } from "@/lib/page-metadata";
 import { getAdminSession } from "@/server/auth/guard";
 import { currentMonth, getLedgerService } from "@/server/modules/ledger";
-import type { LedgerTransaction } from "@/server/modules/ledger/contracts";
+import type { LedgerCategory, LedgerTransaction } from "@/server/modules/ledger/contracts";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import LedgerCharts from "./LedgerCharts";
+import LedgerQuickEntryClient from "./LedgerQuickEntryClient";
+import LedgerTransactionsClient from "./LedgerTransactionsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -75,9 +77,10 @@ export default async function LedgerPage({
   const month = MONTH_PATTERN.test(requested) ? requested : thisMonth;
 
   const service = getLedgerService();
-  const [summaryResult, listResult] = await Promise.allSettled([
+  const [summaryResult, listResult, categoriesResult] = await Promise.allSettled([
     service.summary(month),
-    service.transactions({ month, limit: 20, offset: 0 }),
+    service.transactions({ month, limit: 50, offset: 0 }),
+    service.categories(),
   ]);
   const failed = summaryResult.status === "rejected" || listResult.status === "rejected";
   const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
@@ -85,9 +88,12 @@ export default async function LedgerPage({
     listResult.status === "fulfilled"
       ? listResult.value
       : { items: [], total: 0 };
+  const categories: LedgerCategory[] =
+    categoriesResult.status === "fulfilled" ? categoriesResult.value : [];
 
   const budgets = summary?.budgets ?? [];
   const accounts = summary?.accounts ?? [];
+  const exportMonth = summary?.month ?? month;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 relative z-10 sm:px-6 lg:px-8">
@@ -99,7 +105,7 @@ export default async function LedgerPage({
             {formatMoney(summary?.expense ?? 0)}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href={`/ledger?month=${shiftMonth(month, -1)}`}
             aria-label="上一个月"
@@ -122,11 +128,20 @@ export default async function LedgerPage({
           >
             <ChevronRight className="h-4 w-4" />
           </Link>
+          <a
+            href={`/api/admin/ledger/export?month=${exportMonth}`}
+            download={`ledger-${exportMonth}.csv`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/45 px-3 py-1.5 text-xs text-slate-700 transition hover:border-sky-300 dark:border-white/10 dark:bg-slate-800/45 dark:text-slate-200"
+          >
+            <Download className="h-3.5 w-3.5 text-sky-500" />
+            导出本月 CSV
+          </a>
+          <LedgerQuickEntryClient accounts={accounts} categories={categories} />
           <Link
             href="/admin/ledger"
-            className="rounded-full border border-white/40 px-3 py-1.5 text-xs text-slate-600 hover:border-sky-300 dark:border-white/10 dark:text-slate-300"
+            className="rounded-full border border-white/40 bg-white/45 px-3 py-1.5 text-xs text-slate-700 transition hover:border-sky-300 dark:border-white/10 dark:bg-slate-800/45 dark:text-slate-200"
           >
-            去记账
+            去记账后台
           </Link>
         </div>
       </div>
@@ -143,17 +158,24 @@ export default async function LedgerPage({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             {[
-              { label: "收入", value: summary?.income ?? 0, tone: "text-emerald-600" },
-              { label: "支出", value: summary?.expense ?? 0, tone: "text-rose-600" },
-              { label: "结余", value: summary?.balance ?? 0, tone: "text-slate-800 dark:text-white" },
+              { label: "收入", value: summary?.income ?? 0, tone: "text-emerald-600", sign: true },
+              { label: "支出", value: -(summary?.expense ?? 0), tone: "text-rose-600", sign: false },
+              {
+                label: "结余",
+                value: summary?.balance ?? 0,
+                tone: "text-slate-800 dark:text-white",
+                sign: (summary?.balance ?? 0) > 0,
+              },
             ].map((card) => (
               <div
                 key={card.label}
                 className="rounded-2xl border border-white/40 bg-white/45 p-4 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/45"
               >
                 <p className="text-xs text-slate-500 dark:text-slate-400">{card.label}</p>
-                <p className={`mt-1 text-xl font-semibold ${card.tone}`}>
-                  {formatMoney(card.value)}
+                <p className={`mt-1 text-xl font-semibold tabular-nums ${card.tone}`}>
+                  {card.label === "支出" && card.value === 0
+                    ? formatMoney(0)
+                    : formatMoney(card.value, { sign: card.sign && card.value > 0 })}
                 </p>
               </div>
             ))}
@@ -214,7 +236,7 @@ export default async function LedgerPage({
                   <li key={account.id} className="flex items-baseline gap-2">
                     <span className="text-slate-500 dark:text-slate-400">{account.name}</span>
                     <span className={`tabular-nums ${account.balance < 0 ? "text-rose-600" : "text-slate-700 dark:text-slate-200"}`}>
-                      {formatMoney(account.balance)}
+                      {formatMoney(account.balance, { currency: account.currency })}
                     </span>
                   </li>
                 ))}
@@ -222,39 +244,12 @@ export default async function LedgerPage({
             </section>
           )}
 
-          <div className="mt-6 rounded-2xl border border-white/40 bg-white/45 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/45">
-            <div className="flex items-center justify-between border-b border-white/30 px-4 py-3 dark:border-white/10">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">最近流水</span>
-              {list.total > list.items.length && (
-                <Link href="/admin/ledger" className="text-xs text-sky-700 underline dark:text-sky-300">
-                  查看全部 {list.total} 笔
-                </Link>
-              )}
-            </div>
-            <div className="divide-y divide-white/30 dark:divide-white/10">
-              {list.items.length === 0 && (
-                <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">本月还没有流水。</p>
-              )}
-              {list.items.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                  <span className="w-14 shrink-0 text-xs text-slate-400">
-                    {formatMonthDay(item.occurred_at)}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200">
-                    {item.category_name || "未分类"}
-                    {item.merchant ? ` · ${item.merchant}` : ""}
-                  </span>
-                  <span
-                    className={`shrink-0 tabular-nums font-medium ${
-                      item.kind === "income" ? "text-emerald-600" : "text-rose-600"
-                    }`}
-                  >
-                    {formatMoney(item.kind === "income" ? item.amount : -item.amount, { sign: true })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <LedgerTransactionsClient
+            key={`${month}-${list.total}-${list.items[0]?.id ?? 0}`}
+            month={month}
+            initialItems={list.items}
+            initialTotal={list.total}
+          />
         </>
       )}
     </div>

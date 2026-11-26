@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useDeferredActivation } from "@/lib/useDeferredActivation";
 
+const CommandPalette = dynamic(() => import("@/components/ui/CommandPalette"), { ssr: false });
 const FloatingPlayer = dynamic(() => import("@/components/music/FloatingPlayer"), { ssr: false });
 const Live2D = dynamic(() => import("@/components/widgets/Live2D"), { ssr: false });
 const Toolbox = dynamic(() => import("@/components/widgets/Toolbox"), { ssr: false });
@@ -13,14 +14,19 @@ export default function ClientWidgets() {
   const pathname = usePathname();
   const active = useDeferredActivation();
 
-  if (!active || pathname.startsWith("/garden")) return null;
+  if (pathname.startsWith("/garden")) return null;
 
   return (
     <>
-      <FloatingPlayer />
-      <Live2D />
-      <Toolbox />
-      <GamesPanel />
+      <CommandPalette />
+      {active && (
+        <>
+          {pathname !== "/music" && <FloatingPlayer />}
+          <Live2D />
+          <Toolbox />
+          <GamesPanel />
+        </>
+      )}
     </>
   );
 }

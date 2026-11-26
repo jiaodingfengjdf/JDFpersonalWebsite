@@ -20,8 +20,13 @@ export const libraryBook = sqliteTable(
     note: text("note").notNull().default(""),
     createdAt: createdAt().notNull(),
     updatedAt: updatedAt().notNull(),
+    // 0027 迁移追加，必须保持在物理表列顺序末尾。
+    category: text("category").notNull().default(""),
   },
-  (t) => [index("idx_library_status").on(t.status)],
+  (t) => [
+    index("idx_library_status").on(t.status),
+    index("idx_library_category").on(t.category),
+  ],
 );
 
 /** 阅读进度（每本书一条） */

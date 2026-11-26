@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import AdminError from "./AdminError";
 import AdminPageHeader from "./AdminPageHeader";
 import { useConfirm } from "./ConfirmProvider";
@@ -12,7 +12,11 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import type { MarketAlertItem, MarketOverview } from "@/server/modules/market/contracts";
+import type {
+  MarketAlertItem,
+  MarketOverview,
+  MarketSearchResult,
+} from "@/server/modules/market/contracts";
 
 type QuoteItem = MarketOverview["items"][number];
 
@@ -46,6 +50,11 @@ export default function MarketManager() {
   const [form, setForm] = useState({ market: "cn", kind: "stock", code: "", name: "", cost: "", shares: "" });
   const [alertForm, setAlertForm] = useState({ watchId: "", rule: "up_pct", threshold: "" });
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<MarketSearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchSeqRef = useRef(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +77,81 @@ export default function MarketManager() {
     const frame = requestAnimationFrame(() => void load());
     return () => cancelAnimationFrame(frame);
   }, [load]);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) return;
+
+    const seq = ++searchSeqRef.current;
+    const timer = setTimeout(() => {
+      void adminRequest<{ items: MarketSearchResult[] }>(
+        `/api/admin/market/search?q=${encodeURIComponent(q)}`,
+      )
+        .then((res) => {
+          if (searchSeqRef.current !== seq) return;
+          setSearchResults(res.items);
+          setSearchError(null);
+        })
+        .catch((reason: unknown) => {
+          if (searchSeqRef.current !== seq) return;
+          setSearchError(describeAdminError(reason));
+        })
+        .finally(() => {
+          if (searchSeqRef.current === seq) setSearchLoading(false);
+        });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  function handleSearchChange(nextValue: string) {
+    setSearchQuery(nextValue);
+    if (!nextValue.trim()) {
+      searchSeqRef.current += 1;
+      setSearchResults([]);
+      setSearchError(null);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchError(null);
+    setSearchLoading(true);
+  }
+
+  function applySearchCandidate(candidate: MarketSearchResult) {
+    setForm((prev) => ({
+      ...prev,
+      market: candidate.market,
+      kind: candidate.kind,
+      code: candidate.code,
+      name: candidate.name,
+    }));
+    handleSearchChange("");
+  }
+
+  async function quickAddCandidate(candidate: MarketSearchResult) {
+    setSaving(true);
+    setError(null);
+    try {
+      await adminRequest("/api/admin/market", {
+        method: "POST",
+        body: JSON.stringify({
+          market: candidate.market,
+          kind: candidate.kind,
+          code: candidate.code.trim().toUpperCase(),
+          name: candidate.name.trim(),
+          cost: form.cost ? Number(form.cost) : null,
+          shares: form.shares ? Number(form.shares) : null,
+          sort: 100,
+        }),
+      });
+      handleSearchChange("");
+      await load();
+    } catch (reason) {
+      setError(describeAdminError(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function add() {
     const code = form.code.trim().toUpperCase();
@@ -251,7 +335,102 @@ export default function MarketManager() {
         <CardHeader>
           <CardTitle>添加自选</CardTitle>
         </CardHeader>
-        <div className="grid gap-3 p-4 pt-0 md:grid-cols-4 xl:grid-cols-7">
+        <div className="space-y-4 p-4 pt-0">
+          <div className="space-y-2">
+            <Label htmlFor="market-symbol-search">实时搜索标的（支持代码、名称、拼音首字母）</Label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                id="market-symbol-search"
+                value={searchQuery}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                placeholder="输入 600519、茅台、510300、AAPL、NVDA 搜索并自动填充或直接添加"
+                className="pl-9 pr-9"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  aria-label="清空搜索"
+                  onClick={() => handleSearchChange("")}
+                  className="absolute right-2.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-500/10 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-sky-500"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {searchQuery.trim().length > 0 && (
+              <div className="max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-white/80 dark:border-white/10 dark:bg-slate-900/70">
+                {searchLoading ? (
+                  <p className="p-3 text-xs text-slate-500 dark:text-slate-400">正在搜索…</p>
+                ) : searchError ? (
+                  <p className="p-3 text-xs text-rose-500">{searchError}</p>
+                ) : searchResults.length === 0 ? (
+                  <p className="p-3 text-xs text-slate-500 dark:text-slate-400">
+                    未找到匹配标的，可在下方手动填写。
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-slate-200/70 dark:divide-white/10">
+                    {searchResults.map((candidate) => {
+                      const alreadyAdded =
+                        candidate.watch_id !== null ||
+                        (data?.items ?? []).some(
+                          (item) =>
+                            item.kind === candidate.kind &&
+                            item.code.toUpperCase() === candidate.code.toUpperCase(),
+                        );
+                      return (
+                        <li
+                          key={`${candidate.secid}-${candidate.code}`}
+                          className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => applySearchCandidate(candidate)}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-sky-600 focus-visible:outline-2 focus-visible:outline-sky-500"
+                          >
+                            <span className="truncate font-medium">{candidate.name}</span>
+                            <span className="text-slate-400 tabular-nums">{candidate.code}</span>
+                            <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-700 dark:text-sky-300">
+                              {candidate.badge}
+                            </span>
+                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => applySearchCandidate(candidate)}
+                            >
+                              填充表单
+                            </Button>
+                            {alreadyAdded ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-700 dark:text-emerald-300">
+                                <Check className="h-3 w-3" />
+                                已在自选
+                              </span>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={saving}
+                                onClick={() => void quickAddCandidate(candidate)}
+                              >
+                                <Plus className="mr-1 h-3.5 w-3.5" />
+                                直接添加
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-3 border-t border-slate-200/70 pt-3 dark:border-white/10 md:grid-cols-4 xl:grid-cols-7">
           <div className="space-y-1">
             <Label>市场</Label>
             <Select
@@ -316,6 +495,7 @@ export default function MarketManager() {
               <Plus className="mr-1 h-4 w-4" />
               添加
             </Button>
+          </div>
           </div>
         </div>
       </Card>

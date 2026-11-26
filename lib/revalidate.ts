@@ -42,12 +42,6 @@ export function revalidateProjects(): void {
   safeRevalidate("/projects");
 }
 
-/** 友链：首页、友链页。 */
-export function revalidateFriendLinks(): void {
-  safeRevalidate("/");
-  safeRevalidate("/friends");
-}
-
 /** 收藏夹：首页、收藏夹页。 */
 export function revalidateBookmarks(): void {
   safeRevalidate("/");

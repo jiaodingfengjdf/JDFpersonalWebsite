@@ -3,23 +3,34 @@ import ChatScreen from './features/chat/ChatScreen';
 import SettingsScreen from './features/settings/SettingsScreen';
 import Drawer from './features/sidebar/Drawer';
 import Toasts from './ui/Toasts';
-import { initStore, useApp } from './state/store';
+import {
+  hydrateAuthSession,
+  hydratePublicConfig,
+  initStore,
+  useApp,
+  type AssistantAuthSnapshot,
+  type AssistantPublicConfig,
+} from './state/store';
 
-export default function App() {
-  const state = useApp();
-  const { ready, view, drawerOpen } = state;
+export interface AssistantAppProps {
+  initialAuth?: AssistantAuthSnapshot;
+  initialPublicConfig?: AssistantPublicConfig;
+}
+
+export default function App({ initialAuth, initialPublicConfig }: AssistantAppProps) {
+  const { view, isAdmin, authLoaded } = useApp();
 
   useEffect(() => {
+    if (initialPublicConfig) hydratePublicConfig(initialPublicConfig);
+    if (initialAuth) hydrateAuthSession(initialAuth);
     void initStore();
-  }, []);
+  }, [initialAuth, initialPublicConfig]);
 
-  // 任务/提醒功能已移除：不再轮询提醒，也不渲染提醒横幅
-  void ready;
-  void drawerOpen;
+  const showSettings = view === 'settings' && isAdmin && authLoaded;
 
   return (
     <div className="app">
-      {view === 'chat' ? <ChatScreen /> : <SettingsScreen />}
+      {showSettings ? <SettingsScreen /> : <ChatScreen />}
       <Drawer />
       <Toasts />
     </div>

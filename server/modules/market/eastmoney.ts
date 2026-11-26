@@ -29,6 +29,16 @@ export interface EmQuote {
   prevClose: number;
   /** 上游更新时间（毫秒），未知为 null */
   updatedAt: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  volume?: number | null;
+  amount?: number | null;
+  amplitude?: number | null;
+  turnoverRate?: number | null;
+  pe?: number | null;
+  pb?: number | null;
+  marketCap?: number | null;
 }
 
 export interface KlineBar {
@@ -136,16 +146,37 @@ interface UlistResponse {
       f2?: number;
       f3?: number;
       f4?: number;
+      f5?: number;
+      f6?: number;
+      f7?: number;
+      f8?: number;
+      f9?: number;
       f12?: string;
       f13?: number;
       f14?: string;
+      f15?: number;
+      f16?: number;
+      f17?: number;
       f18?: number;
+      f20?: number;
+      f23?: number;
       f124?: number;
     }>;
   };
 }
 
-const QUOTE_FIELDS = "f2,f3,f4,f12,f13,f14,f18,f124";
+const QUOTE_FIELDS = "f2,f3,f4,f5,f6,f7,f8,f9,f12,f13,f14,f15,f16,f17,f18,f20,f23,f124";
+
+const optPositive = (value: unknown): number | null => {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+};
+
+const optFinite = (value: unknown): number | null => {
+  if (value === undefined || value === null || value === "-") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
 
 /** 批量报价。返回以 `market.code` 为键的映射，失败时整体降级为空。 */
 export async function quotesBySecids(
@@ -177,6 +208,16 @@ export async function quotesBySecids(
           changePct: Number(row.f3) || 0,
           prevClose: Number(row.f18) || 0,
           updatedAt: row.f124 && row.f124 > 0 ? row.f124 * 1000 : null,
+          open: optPositive(row.f17),
+          high: optPositive(row.f15),
+          low: optPositive(row.f16),
+          volume: optFinite(row.f5),
+          amount: optPositive(row.f6),
+          amplitude: optPositive(row.f7),
+          turnoverRate: optPositive(row.f8),
+          pe: optPositive(row.f9),
+          pb: optPositive(row.f23),
+          marketCap: optPositive(row.f20),
         });
       }
     }
@@ -192,15 +233,21 @@ const US_INDEX_ALIASES: Record<string, { secid: string; name: string }> = {
   SPX: { secid: "100.SPX", name: "标普500" },
   SPX500: { secid: "100.SPX", name: "标普500" },
   NDX: { secid: "100.NDX", name: "纳斯达克" },
+  NDX100: { secid: "100.NDX100", name: "纳斯达克100" },
   DJIA: { secid: "100.DJIA", name: "道琼斯" },
   DJI: { secid: "100.DJIA", name: "道琼斯" },
+  HSI: { secid: "100.HSI", name: "恒生指数" },
+  HSTECH: { secid: "100.HSTECH", name: "恒生科技" },
+  N225: { secid: "100.N225", name: "日经225" },
 };
 
 /** A 股/指数代码 → 东财 secid；基金没有 K 线，返回空串。 */
 export function cnSecid(kind: string, code: string): string {
   if (kind === "fund") return "";
   if (kind === "index") return code.startsWith("39") ? `0.${code}` : `1.${code}`;
-  return code.startsWith("6") || code.startsWith("9") ? `1.${code}` : `0.${code}`;
+  return code.startsWith("5") || code.startsWith("6") || code.startsWith("9")
+    ? `1.${code}`
+    : `0.${code}`;
 }
 
 interface SuggestResponse {
@@ -239,7 +286,7 @@ export async function resolveUsSecid(
   const hit = rows.find((row) => {
     const market = row.MktNum ?? "";
     return (
-      (market === "105" || market === "106" || market === "107") &&
+      (market === "105" || market === "106" || market === "107" || market === "100") &&
       (row.Code ?? "").toUpperCase() === code &&
       Boolean(row.QuoteID)
     );
@@ -249,11 +296,135 @@ export async function resolveUsSecid(
     ? {
         secid: hit.QuoteID as string,
         name: hit.Name?.trim() || code,
-        kind: "stock" as const,
+        kind: (hit.MktNum === "100" ? "index" : "stock") as "stock" | "index",
       }
     : null;
   resolved.set(code, value);
   return value;
+}
+
+export interface MarketSearchCandidate {
+  market: "cn" | "us";
+  kind: "stock" | "index" | "fund";
+  code: string;
+  name: string;
+  secid: string;
+  badge: string;
+}
+
+const SEARCH_TTL = 60_000;
+
+/** 按代码、名称或拼音搜索 A 股、场内 ETF、公募基金、美股及全球指数。 */
+export async function searchMarketSymbols(query: string): Promise<MarketSearchCandidate[]> {
+  const clean = query.trim();
+  if (!clean) return [];
+
+  const { value } = await cached(`suggest:${clean.toUpperCase()}`, SEARCH_TTL, async () => {
+    const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(clean)}&type=14&count=18`;
+    const json = await fetchJson<SuggestResponse>(url, "https://quote.eastmoney.com/");
+    const rows = json?.QuotationCodeTable?.Data ?? [];
+    const output: MarketSearchCandidate[] = [];
+    const seen = new Set<string>();
+
+    const push = (candidate: MarketSearchCandidate) => {
+      const dedupKey = `${candidate.kind}:${candidate.code}`;
+      if (seen.has(dedupKey)) return;
+      seen.add(dedupKey);
+      output.push(candidate);
+    };
+
+    const alias = US_INDEX_ALIASES[clean.toUpperCase()];
+    if (alias) {
+      push({
+        market: "us",
+        kind: "index",
+        code: clean.toUpperCase(),
+        name: alias.name,
+        secid: alias.secid,
+        badge: "全球指数",
+      });
+    }
+
+    for (const row of rows) {
+      const rawCode = (row.Code ?? "").trim();
+      const codeUpper = rawCode.toUpperCase();
+      const name = row.Name?.trim() || codeUpper;
+      const mkt = row.MktNum ?? "";
+      const classify = row.Classify ?? "";
+      const typeName = row.SecurityTypeName?.trim() ?? "";
+      const quoteId = row.QuoteID?.trim() ?? "";
+
+      if ((mkt === "150" || classify === "OTCFUND") && /^\d{6}$/.test(rawCode)) {
+        push({
+          market: "cn",
+          kind: "fund",
+          code: rawCode,
+          name,
+          secid: "",
+          badge: "公募基金",
+        });
+        continue;
+      }
+
+      if ((mkt === "0" || mkt === "1") && /^\d{6}$/.test(rawCode) && quoteId) {
+        if (classify === "Index" || typeName === "指数") {
+          push({
+            market: "cn",
+            kind: "index",
+            code: rawCode,
+            name,
+            secid: quoteId,
+            badge: "A股指数",
+          });
+        } else if (classify === "AStock" || classify === "Fund") {
+          push({
+            market: "cn",
+            kind: "stock",
+            code: rawCode,
+            name,
+            secid: quoteId,
+            badge: classify === "Fund" ? "场内ETF" : typeName || "A股",
+          });
+        }
+        continue;
+      }
+
+      if (
+        (mkt === "105" || mkt === "106" || mkt === "107") &&
+        /^[A-Z][A-Z0-9.\-]{0,9}$/.test(codeUpper) &&
+        quoteId
+      ) {
+        push({
+          market: "us",
+          kind: "stock",
+          code: codeUpper,
+          name,
+          secid: quoteId,
+          badge: "美股/ETF",
+        });
+        continue;
+      }
+
+      if (
+        mkt === "100" &&
+        /^[A-Z][A-Z0-9.\-]{0,9}$/.test(codeUpper) &&
+        quoteId
+      ) {
+        push({
+          market: "us",
+          kind: "index",
+          code: codeUpper,
+          name,
+          secid: quoteId,
+          badge: "全球指数",
+        });
+      }
+    }
+
+    return output;
+  });
+
+  return value ?? [];
 }
 
 /* -------------------------------- K 线 -------------------------------- */
@@ -422,6 +593,11 @@ export async function fundNav(code: string): Promise<{ points: NavPoint[]; stale
 export const GLOBAL_INDICES = [
   { code: "000001", name: "上证指数", market: "cn" as const, secid: "1.000001" },
   { code: "399001", name: "深证成指", market: "cn" as const, secid: "0.399001" },
+  { code: "399006", name: "创业板指", market: "cn" as const, secid: "0.399006" },
+  { code: "000300", name: "沪深300", market: "cn" as const, secid: "1.000300" },
+  { code: "000688", name: "科创50", market: "cn" as const, secid: "1.000688" },
+  { code: "HSI", name: "恒生指数", market: "cn" as const, secid: "100.HSI" },
+  { code: "HSTECH", name: "恒生科技", market: "cn" as const, secid: "100.HSTECH" },
   { code: "SPX", name: "标普500", market: "us" as const, secid: "100.SPX" },
   { code: "NDX", name: "纳斯达克", market: "us" as const, secid: "100.NDX" },
   { code: "DJIA", name: "道琼斯", market: "us" as const, secid: "100.DJIA" },

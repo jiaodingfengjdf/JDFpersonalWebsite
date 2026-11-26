@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { MessageSquare, Heart } from "lucide-react";
+import { MessageSquare, Heart, RotateCcw } from "lucide-react";
 import { getChatters } from "@/lib/api";
 import type { ChatterItem } from "@/lib/api";
 import { bypassImageOptimization } from "@/lib/image";
@@ -43,24 +43,45 @@ export default function LatestChatterCarousel() {
   const [topIndex, setTopIndex] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadSeed, setReloadSeed] = useState(0);
+
   const startX = useRef(0);
   const startY = useRef(0);
   const didDrag = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     getChatters({ status: "published", page: 1, size: 50 })
       .then((data) => {
-        if (!data.length) return;
+        if (cancelled) return;
+        if (!data.length) {
+          setItems([]);
+          setError(false);
+          return;
+        }
         const latestDate = data[0].created_at.slice(0, 10);
         const latestDay = data.filter(
-          (c) => c.created_at.slice(0, 10) === latestDate
+          (c) => c.created_at.slice(0, 10) === latestDate,
         );
-        setItems(latestDay);
+        setItems(latestDay.length > 0 ? latestDay : data.slice(0, 5));
+        setTopIndex(0);
+        setError(false);
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadSeed]);
 
   const goNext = useCallback(() => {
+    if (items.length <= 1) return;
     setTopIndex((prev) => (prev + 1) % items.length);
     setOffset({ x: 0, y: 0 });
   }, [items.length]);
@@ -106,9 +127,50 @@ export default function LatestChatterCarousel() {
     }
   }
 
+  if (loading) {
+    return (
+      <div
+        aria-busy="true"
+        aria-label="加载最新说说中"
+        className="w-full h-full rounded-3xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl min-h-[160px] md:min-h-[220px] p-5 flex flex-col justify-between animate-pulse"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-14 rounded-full bg-slate-300/60 dark:bg-slate-700/70" />
+            <div className="h-3.5 w-20 rounded bg-slate-200/80 dark:bg-slate-700/50" />
+          </div>
+          <div className="h-3.5 w-full rounded bg-slate-300/60 dark:bg-slate-700/60" />
+          <div className="h-3.5 w-4/5 rounded bg-slate-200/80 dark:bg-slate-700/50" />
+        </div>
+        <div className="h-3.5 w-12 rounded bg-slate-200/70 dark:bg-slate-700/40" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-full rounded-3xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl min-h-[160px] md:min-h-[220px] flex flex-col items-center justify-center gap-3 p-6 text-slate-500 dark:text-slate-400">
+        <MessageSquare className="w-10 h-10 opacity-45" />
+        <span className="text-sm">最新说说加载失败</span>
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            setError(false);
+            setReloadSeed((s) => s + 1);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-sky-500/15 px-3.5 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-500/25 dark:text-sky-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          重试加载
+        </button>
+      </div>
+    );
+  }
+
   if (!items.length) {
     return (
-      <div className="w-full h-full rounded-3xl bg-white/40 dark:bg-slate-800/50 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl min-h-[160px] md:min-h-[220px] flex flex-col items-center justify-center gap-3 text-slate-400 dark:text-slate-500">
+      <div className="w-full h-full rounded-3xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl min-h-[160px] md:min-h-[220px] flex flex-col items-center justify-center gap-3 text-slate-400 dark:text-slate-500">
         <MessageSquare className="w-10 h-10 opacity-40" />
         <span className="text-sm">暂无说说</span>
       </div>
@@ -166,8 +228,8 @@ export default function LatestChatterCarousel() {
             }
             className={`absolute inset-0 rounded-3xl border shadow-lg p-3 md:p-5 flex flex-col justify-between pointer-events-none overflow-hidden ${
               isTop
-                ? "bg-white dark:bg-slate-800 border-white/50 dark:border-white/10"
-                : "bg-slate-200 dark:bg-slate-700 border-slate-200 dark:border-slate-700"
+                ? "bg-white/85 dark:bg-slate-800/85 backdrop-blur-md border-white/50 dark:border-white/10"
+                : "bg-slate-200/80 dark:bg-slate-700/80 border-slate-200 dark:border-slate-700"
             }`}
           >
             {isTop ? (
@@ -206,11 +268,19 @@ export default function LatestChatterCarousel() {
 
       {items.length > 1 && (
         <div className="absolute bottom-4 right-5 z-30 flex gap-1.5">
-          {items.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 rounded-full transition-all duration-300 ${
-                i === topIndex ? "w-4 bg-sky-400" : "w-1 bg-white/30"
+          {items.map((item, i) => (
+            <button
+              type="button"
+              key={item.id}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setTopIndex(i);
+                setOffset({ x: 0, y: 0 });
+              }}
+              aria-label={`查看第 ${i + 1} 条说说`}
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+                i === topIndex ? "w-4 bg-sky-500" : "w-1.5 bg-slate-400/50 dark:bg-white/30 hover:bg-sky-400/70"
               }`}
             />
           ))}

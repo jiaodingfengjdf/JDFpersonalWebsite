@@ -10,9 +10,7 @@ import {
   Home,
   BookOpen,
   MessageSquare,
-  Newspaper,
   FolderGit2,
-  Users,
   Camera,
   Clock,
   Music,
@@ -25,6 +23,7 @@ import {
   ChevronDown,
   ExternalLink,
   Link2,
+  Search,
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -38,7 +37,11 @@ import {
   type NavDropdownLink,
 } from "@/lib/nav-dropdown";
 import { navDropdownIcons } from "@/lib/nav-dropdown-icons";
-import { defaultInterestDropdownConfig } from "@/lib/interest-modules";
+import {
+  defaultInterestDropdownConfig,
+  INTEREST_MODULES,
+  interestModuleByHref,
+} from "@/lib/interest-modules";
 
 const SettingsPanel = dynamic(() => import("@/components/ui/SettingsPanel"), { ssr: false });
 
@@ -54,10 +57,8 @@ const navLinks: NavLink[] = [
   { href: "/", label: "首页", icon: Home },
   { href: "/posts", label: "文章", icon: BookOpen },
   { href: "/moments", label: "说说", icon: MessageSquare },
-  { href: "/messages", label: "留言", icon: Newspaper },
   { href: "/bookmark", label: "收藏", icon: Bookmark },
   { href: "/projects", label: "项目", icon: FolderGit2 },
-  { href: "/friends", label: "友链", icon: Users },
   { href: "/photowall", label: "照片墙", icon: Camera },
   { href: "/timeline", label: "归档", icon: Clock },
   { href: "/music", label: "音乐", icon: Music },
@@ -69,34 +70,62 @@ const navLinks: NavLink[] = [
  */
 function NavDropdownItem({
   link,
+  pathname,
   onSelect,
   className,
 }: {
   link: NavDropdownLink;
+  pathname: string;
   onSelect: () => void;
   className: string;
 }) {
   const external = isExternalHref(link.href);
+  const matchedModule = !external ? interestModuleByHref(link.href) : undefined;
+  const ItemIcon = matchedModule ? navDropdownIcons[matchedModule.icon] : null;
+  const isActive = !external && isNavLinkActive(pathname, link.href);
+
+  const resolvedClassName = `${className} focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+    isActive
+      ? "bg-sky-500/12 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300 font-medium"
+      : ""
+  }`;
 
   const content = (
-    <>
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate">{link.label}</span>
-        {external ? (
-          <ExternalLink className="size-3 shrink-0 opacity-50" aria-hidden />
-        ) : null}
-      </span>
-      {link.description ? (
-        <span className="block truncate text-[11px] opacity-70">
-          {link.description}
-        </span>
+    <div className="flex items-start gap-2.5">
+      {ItemIcon ? (
+        <ItemIcon
+          className={`mt-0.5 size-4 shrink-0 ${
+            isActive
+              ? "text-sky-600 dark:text-sky-400"
+              : "text-slate-400 dark:text-slate-500"
+          }`}
+          aria-hidden="true"
+        />
       ) : null}
-    </>
+      <div className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate">{link.label}</span>
+          {external ? (
+            <ExternalLink className="size-3 shrink-0 opacity-50" aria-hidden />
+          ) : null}
+        </span>
+        {link.description ? (
+          <span className="block truncate text-[11px] opacity-70">
+            {link.description}
+          </span>
+        ) : null}
+      </div>
+    </div>
   );
 
   if (!external && isInternalHref(link.href)) {
     return (
-      <Link href={link.href} onClick={onSelect} className={className}>
+      <Link
+        href={link.href}
+        onClick={onSelect}
+        aria-current={isActive ? "page" : undefined}
+        className={resolvedClassName}
+      >
         {content}
       </Link>
     );
@@ -106,12 +135,26 @@ function NavDropdownItem({
     <a
       href={link.href}
       onClick={onSelect}
-      className={className}
+      className={resolvedClassName}
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
     >
       {content}
     </a>
   );
+}
+
+function resolveAdminHref(pathname: string): string {
+  const matchedInterest = INTEREST_MODULES.find(
+    (module) =>
+      module.adminHref &&
+      (pathname === module.href || pathname.startsWith(`${module.href}/`)),
+  );
+  if (matchedInterest?.adminHref) return matchedInterest.adminHref;
+  if (pathname === "/posts" || pathname.startsWith("/posts/")) return "/admin/posts";
+  if (pathname === "/moments" || pathname.startsWith("/moments/")) return "/admin/chatters";
+  if (pathname === "/projects" || pathname.startsWith("/projects/")) return "/admin/projects";
+  if (pathname === "/photowall" || pathname.startsWith("/photowall/")) return "/admin/albums";
+  return "/admin";
 }
 
 export default function Navbar({
@@ -125,6 +168,7 @@ export default function Navbar({
   const { toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const [easterEgg, setEasterEgg] = useState(false);
   const clickTimes = useRef<number[]>([]);
@@ -151,6 +195,16 @@ export default function Navbar({
       })
       .catch(() => {
         // 拿不到配置就沿用服务端注入的值，不把栏目清掉。
+      });
+    fetch("/api/auth/session", { signal: controller.signal, cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: unknown) => {
+        if (controller.signal.aborted) return;
+        const session = payload as { isAdmin?: boolean } | null;
+        setIsAdmin(Boolean(session?.isAdmin));
+      })
+      .catch(() => {
+        // 会话检测失败时保持非管理员视图。
       });
     return () => controller.abort();
   }, []);
@@ -470,6 +524,7 @@ export default function Navbar({
                               <li key={`${link.label}-${link.href}`}>
                                 <NavDropdownItem
                                   link={link}
+                                  pathname={pathname}
                                   onSelect={() => setIsDropdownOpen(false)}
                                   className={dropdownItemClass}
                                 />
@@ -484,13 +539,41 @@ export default function Navbar({
               )}
             </div>
 
-            {/* Theme Toggle, Settings & Mobile Menu */}
-            <div className="flex items-center gap-2">
+            {/* Quick Command, Theme Toggle, Settings & Mobile Menu */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {isAdmin && (
+                <Link
+                  href={resolveAdminHref(pathname)}
+                  title="前往管理后台"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-emerald-400/25 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/25"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                  <span>后台</span>
+                </Link>
+              )}
+
               <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  window.dispatchEvent(new CustomEvent("open-command-palette"));
+                }}
+                title="快速搜索与跳转 (/ 或 Ctrl+Shift+K)"
+                aria-label="打开全局搜索与命令面板"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-slate-600 dark:text-slate-300 bg-white/40 dark:bg-slate-800/50 hover:bg-white/70 dark:hover:bg-slate-700/70 border border-white/40 dark:border-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              >
+                <Search className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                <kbd className="hidden sm:inline-block rounded bg-slate-200/70 dark:bg-slate-700/80 px-1.5 py-0.5 font-mono text-[11px] leading-none text-slate-600 dark:text-slate-300">
+                  /
+                </kbd>
+              </button>
+
+              <button
+                type="button"
                 onClick={toggleTheme}
                 title="切换明暗主题"
                 aria-label="切换明暗主题"
-                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
+                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 {/* 明暗两个图标都渲染、由 CSS 决定显示哪个：
                     服务端无需知道客户端主题，避免水合前后图标不一致。 */}
@@ -501,9 +584,11 @@ export default function Navbar({
               {/* Settings Button */}
               <div className="relative" ref={settingsRef}>
                 <button
+                  type="button"
                   onClick={() => setIsSettingsOpen(!isSettingsOpen)}
                   title="设置"
-                  className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
+                  aria-label="打开外观设置"
+                  className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                 >
                   <Settings className="w-5 h-5" />
                 </button>
@@ -522,8 +607,11 @@ export default function Navbar({
               </div>
 
               <button
+                type="button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100/50 dark:text-slate-400 dark:hover:bg-slate-800/50 xl:hidden"
+                aria-label={isMobileMenuOpen ? "收起菜单" : "展开菜单"}
+                aria-expanded={isMobileMenuOpen}
+                className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100/50 dark:text-slate-400 dark:hover:bg-slate-800/50 xl:hidden cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 {isMobileMenuOpen ? (
                   <X className="w-5 h-5" />
@@ -623,6 +711,7 @@ export default function Navbar({
                             <NavDropdownItem
                               key={`${link.label}-${link.href}`}
                               link={link}
+                              pathname={pathname}
                               onSelect={() => setIsMobileMenuOpen(false)}
                               className={dropdownItemMobileClass}
                             />

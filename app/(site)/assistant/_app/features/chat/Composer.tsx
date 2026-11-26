@@ -7,16 +7,18 @@ import { compressImage } from '../../lib/image';
 import { formatBytes } from '../../lib/format';
 import { uid } from '../../lib/uid';
 import { sendMessage, stopStreaming, toast, updateSettings, useApp } from '../../state/store';
+import { openImageViewer } from '../../ui/imageViewer';
 import {
   BrainIcon,
+  ChevronDownIcon,
   FileIcon,
   GlobeIcon,
   MicIcon,
   PaperclipIcon,
   SendIcon,
+  SlashIcon,
   StopIcon,
   XIcon,
-  ChevronDownIcon,
 } from '../../ui/Icons';
 
 const MODEL_OPTIONS = ['deepseek-flash', 'deepseek-v4-pro'];
@@ -30,13 +32,69 @@ const EFFORT_LABEL: Record<string, string> = {
 
 const EFFORT_CYCLE: Array<'' | 'low' | 'medium' | 'high'> = ['', 'low', 'medium', 'high'];
 
+interface PromptTemplate {
+  id: string;
+  label: string;
+  hint: string;
+  body: string;
+}
+
+const PROMPT_TEMPLATES: PromptTemplate[] = [
+  {
+    id: 'polish',
+    label: '写作润色',
+    hint: '提升流畅度与表达质感',
+    body: '请帮我润色以下内容，使其表达更精炼自然，保留原意并指出 2 处关键优化点：\n\n',
+  },
+  {
+    id: 'debug',
+    label: '代码排查',
+    hint: '定位根因并给最小修复',
+    body: '请分析下面这段代码/报错的原因，先说结论，再给出最小化的修改建议：\n\n```\n\n```',
+  },
+  {
+    id: 'summary',
+    label: '提炼要点',
+    hint: '结构化总结与行动项',
+    body: '请将以下资料提炼成 3–5 条核心要点，并在末尾给出可执行的下一步建议：\n\n',
+  },
+  {
+    id: 'compare',
+    label: '方案对比',
+    hint: '优劣权衡与推荐结论',
+    body: '请用表格对比以下两个方案在成本、性能与可维护性上的差异，并给出推荐选择：\n\n方案 A：\n方案 B：',
+  },
+  {
+    id: 'translate',
+    label: '双语精译',
+    hint: '信达雅技术/文案翻译',
+    body: '请将以下文本准确流畅地翻译（中英互译），专业术语保留原文括号注释：\n\n',
+  },
+  {
+    id: 'brainstorm',
+    label: '头脑风暴',
+    hint: '发散 5 个差异化思路',
+    body: '围绕以下主题，请给我 5 个有辨识度的创意方向，每个方向附一句核心卖点：\n\n主题：',
+  },
+];
+
+export interface ComposerDraftRequest {
+  id: number;
+  text: string;
+  mode: 'replace' | 'append';
+}
+
 interface UploadProgress {
   name: string;
   percent: number;
 }
 
-export default function Composer() {
-  const { settings, streaming } = useApp();
+export default function Composer({
+  draftRequest,
+}: {
+  draftRequest?: ComposerDraftRequest | null;
+}) {
+  const { settings, streaming, isAdmin, publicConfig } = useApp();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState<UploadProgress | null>(null);
@@ -45,18 +103,42 @@ export default function Composer() {
   const [recordingMs, setRecordingMs] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
   const [modelMenu, setModelMenu] = useState(false);
+  const [promptMenu, setPromptMenu] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<RecorderHandle | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordStartedRef = useRef(0);
+  const lastDraftIdRef = useRef(0);
+
+  // 响应外部快捷填充 / 引用追问请求
+  useEffect(() => {
+    if (!draftRequest || draftRequest.id === lastDraftIdRef.current) return;
+    lastDraftIdRef.current = draftRequest.id;
+    const frame = requestAnimationFrame(() => {
+      setText((prev) =>
+        draftRequest.mode === 'append' && prev.trim()
+          ? `${prev}\n${draftRequest.text}`
+          : draftRequest.text,
+      );
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        const len = draftRequest.text.length;
+        el.setSelectionRange(len, len);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [draftRequest]);
 
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(148, el.scrollHeight)}px`;
+    el.style.height = `${Math.min(180, el.scrollHeight)}px`;
   }, [text]);
 
   useEffect(
@@ -67,16 +149,29 @@ export default function Composer() {
     [],
   );
 
+  // Esc：优先关闭弹层；若正在流式生成则立即中断
   useEffect(() => {
-    if (!modelMenu) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setModelMenu(false);
+      if (event.key !== 'Escape') return;
+      if (modelMenu || promptMenu) {
+        setModelMenu(false);
+        setPromptMenu(false);
+        return;
+      }
+      if (streaming) {
+        event.preventDefault();
+        stopStreaming();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [modelMenu]);
+  }, [modelMenu, promptMenu, streaming]);
 
-  const hasApiKey = Boolean(settings.apiKey.trim());
+  const hasClientKey = Boolean(settings.apiKey.trim());
+  const activeModel = isAdmin ? settings.model : publicConfig?.model || settings.model;
+  const thinkingOn = isAdmin ? settings.thinking : Boolean(publicConfig?.thinking ?? settings.thinking);
+  const webSearchOn = isAdmin ? settings.webSearch : Boolean(publicConfig?.webSearch ?? settings.webSearch);
+  const activeEffort = isAdmin ? settings.effort : (publicConfig?.effort ?? settings.effort);
 
   /* ---------------- 附件 ---------------- */
 
@@ -109,8 +204,11 @@ export default function Composer() {
         continue;
       }
 
-      if (!hasApiKey) {
-        toast('上传文档需要先填写 API Key', 'error');
+      if (!hasClientKey) {
+        toast(
+          isAdmin ? '上传文档需要先在设置里填写 API Key' : '当前仅支持粘贴或上传图片附件',
+          'error',
+        );
         continue;
       }
       const purpose = pickPurpose(file);
@@ -146,6 +244,25 @@ export default function Composer() {
     const files = Array.from(event.target.files ?? []);
     event.target.value = '';
     void addFiles(files);
+  };
+
+  const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(event.clipboardData?.items ?? []);
+    const imageFiles = items
+      .filter((item) => item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => Boolean(f));
+    if (imageFiles.length > 0) {
+      event.preventDefault();
+      void addFiles(imageFiles);
+    }
+  };
+
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    if (files.length > 0) void addFiles(files);
   };
 
   const removeAttachment = (id: string) => {
@@ -194,8 +311,11 @@ export default function Composer() {
       return;
     }
     if (transcribing) return;
-    if (!hasApiKey) {
-      toast('语音输入需要先填写 API Key', 'error');
+    if (!hasClientKey) {
+      toast(
+        isAdmin ? '语音输入需要先在设置里填写 API Key' : '语音转写需要站长在设置中开启直连密钥',
+        'error',
+      );
       return;
     }
     try {
@@ -213,6 +333,16 @@ export default function Composer() {
     } catch (err) {
       toast(err instanceof Error ? err.message : '无法启动录音', 'error');
     }
+  };
+
+  /* ---------------- 模板插入 ---------------- */
+
+  const insertTemplate = (template: PromptTemplate) => {
+    setPromptMenu(false);
+    setText((prev) => (prev.trim() ? `${prev}\n\n${template.body}` : template.body));
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
   };
 
   /* ---------------- 发送 ---------------- */
@@ -244,8 +374,20 @@ export default function Composer() {
     }
   };
 
+  const charCount = text.length;
+
   return (
-    <div className="composer">
+    <div
+      className={`composer${dragging ? ' is-dragging' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragging) setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={onDrop}
+    >
       {recording ? (
         <div className="recorder">
           <div className="rec-dot" />
@@ -260,7 +402,7 @@ export default function Composer() {
               />
             ))}
           </div>
-          <span className="rec-hint">松手/点击结束</span>
+          <span className="rec-hint">点击完成结束录音</span>
           <button type="button" className="rec-stop" onClick={() => void stopRecording()}>
             完成
           </button>
@@ -272,7 +414,15 @@ export default function Composer() {
           {attachments.map((att) => (
             <div key={att.id} className="composer-att">
               {att.kind === 'image' && att.dataUrl ? (
-                <img src={att.dataUrl} alt={att.filename} />
+                <button
+                  type="button"
+                  className="composer-att-preview"
+                  onClick={() => openImageViewer(att.dataUrl!)}
+                  aria-label={`预览图片：${att.filename}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- 本地压缩后的 base64 图片预览 */}
+                  <img src={att.dataUrl} alt={att.filename} />
+                </button>
               ) : (
                 <span className="composer-att-file">
                   <FileIcon size={16} />
@@ -312,60 +462,113 @@ export default function Composer() {
           onChange={onPickFiles}
         />
 
-        <div className="input-wrap">
-          <textarea className="resize-none"
+        <div className={`input-wrap${focused ? ' is-focused' : ''}`}>
+          <textarea
+            className="resize-none"
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={transcribing ? '正在识别语音…' : '发消息给助理…'}
+            onPaste={onPaste}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder={
+              transcribing
+                ? '正在识别语音…'
+                : dragging
+                  ? '松开即可添加附件…'
+                  : '发消息给助理，支持粘贴图片或点击下方快捷模板…'
+            }
             rows={1}
             disabled={recording}
             enterKeyHint="send"
           />
           <div className="input-tools">
+            {isAdmin ? (
+              <>
+                <button
+                  type="button"
+                  className={'tool-toggle composer-model-chip' + (modelMenu ? ' on' : '')}
+                  onClick={() => {
+                    setPromptMenu(false);
+                    setModelMenu((open) => !open);
+                  }}
+                  aria-expanded={modelMenu}
+                  aria-label="切换模型"
+                >
+                  <span className="model-short">{activeModel.replace('deepseek-', '') || 'flash'}</span>
+                  <ChevronDownIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  className={`tool-toggle ${webSearchOn ? 'on' : ''}`}
+                  onClick={() => updateSettings({ webSearch: !settings.webSearch })}
+                  aria-pressed={webSearchOn}
+                >
+                  <GlobeIcon size={14} />
+                  联网
+                </button>
+                <button
+                  type="button"
+                  className={`tool-toggle ${thinkingOn ? 'on' : ''}`}
+                  onClick={() => updateSettings({ thinking: !settings.thinking })}
+                  aria-pressed={thinkingOn}
+                >
+                  <BrainIcon size={14} />
+                  思考
+                </button>
+                {thinkingOn ? (
+                  <button
+                    type="button"
+                    className={'tool-toggle composer-effort-chip' + (activeEffort ? ' on' : '')}
+                    onClick={() => {
+                      const idx = EFFORT_CYCLE.indexOf(settings.effort);
+                      const next = EFFORT_CYCLE[(idx + 1) % EFFORT_CYCLE.length];
+                      updateSettings({ effort: next });
+                    }}
+                    aria-label={'思考强度：' + (EFFORT_LABEL[activeEffort] ?? '默认')}
+                  >
+                    强度 {EFFORT_LABEL[activeEffort] ?? '默认'}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <span
+                  className="tool-toggle is-readonly composer-model-chip"
+                  title="模型参数由站长统一配置"
+                >
+                  <span className="model-short">{activeModel.replace('deepseek-', '') || 'flash'}</span>
+                </span>
+                {webSearchOn ? (
+                  <span className="tool-toggle is-readonly on" title="站长已开启联网搜索">
+                    <GlobeIcon size={14} />
+                    联网
+                  </span>
+                ) : null}
+                {thinkingOn ? (
+                  <span className="tool-toggle is-readonly on" title="站长已开启深度思考">
+                    <BrainIcon size={14} />
+                    思考
+                  </span>
+                ) : null}
+              </>
+            )}
+
             <button
               type="button"
-              className={'tool-toggle composer-model-chip' + (modelMenu ? ' on' : '')}
-              onClick={() => setModelMenu((open) => !open)}
-              aria-expanded={modelMenu}
-              aria-label="切换模型"
+              className={`tool-toggle composer-templates-btn${promptMenu ? ' on' : ''}`}
+              onClick={() => {
+                setModelMenu(false);
+                setPromptMenu((open) => !open);
+              }}
+              aria-expanded={promptMenu}
+              aria-label="快捷指令模板"
             >
-              <span className="model-short">{settings.model.replace('deepseek-', '') || 'flash'}</span>
-              <ChevronDownIcon size={12} />
+              <SlashIcon size={14} />
+              模板
             </button>
-            <button
-              type="button"
-              className={`tool-toggle ${settings.webSearch ? 'on' : ''}`}
-              onClick={() => updateSettings({ webSearch: !settings.webSearch })}
-              aria-pressed={settings.webSearch}
-            >
-              <GlobeIcon size={14} />
-              联网
-            </button>
-            <button
-              type="button"
-              className={`tool-toggle ${settings.thinking ? 'on' : ''}`}
-              onClick={() => updateSettings({ thinking: !settings.thinking })}
-              aria-pressed={settings.thinking}
-            >
-              <BrainIcon size={14} />
-              思考
-            </button>
-            {settings.thinking ? (
-              <button
-                type="button"
-                className={'tool-toggle composer-effort-chip' + (settings.effort ? ' on' : '')}
-                onClick={() => {
-                  const index = EFFORT_CYCLE.indexOf(settings.effort);
-                  const next = EFFORT_CYCLE[(index + 1) % EFFORT_CYCLE.length];
-                  updateSettings({ effort: next });
-                }}
-                aria-label={'思考强度：' + (EFFORT_LABEL[settings.effort] ?? '默认')}
-              >
-                强度 {EFFORT_LABEL[settings.effort] ?? '默认'}
-              </button>
-            ) : null}
+
             <button
               type="button"
               className={`tool-toggle ${recording ? 'on' : ''}`}
@@ -373,30 +576,34 @@ export default function Composer() {
               aria-label="语音输入"
               disabled={transcribing}
             >
-              {transcribing ? (
-                <span className="spinner" />
-              ) : (
-                <MicIcon size={14} />
-              )}
+              {transcribing ? <span className="spinner" /> : <MicIcon size={14} />}
               {transcribing ? '识别中' : recording ? '录制中' : '语音'}
             </button>
+
             <button
               type="button"
               className="tool-toggle tool-attach"
-                onClick={() => fileRef.current?.click()}
-                aria-label="添加附件"
-                disabled={transcribing}
-              >
-                <PaperclipIcon size={14} />
-                附件
-              </button>
-            </div>
+              onClick={() => fileRef.current?.click()}
+              aria-label="添加附件"
+              disabled={transcribing}
+            >
+              <PaperclipIcon size={14} />
+              附件{attachments.length > 0 ? ` ${attachments.length}` : ''}
+            </button>
+          </div>
 
-          {modelMenu ? (
-            <div className="model-backdrop" onClick={() => setModelMenu(false)} aria-hidden />
+          {modelMenu || promptMenu ? (
+            <div
+              className="model-backdrop"
+              onClick={() => {
+                setModelMenu(false);
+                setPromptMenu(false);
+              }}
+              aria-hidden
+            />
           ) : null}
 
-          {modelMenu ? (
+          {isAdmin && modelMenu ? (
             <div className="model-menu" role="menu" aria-label="模型列表">
               {MODEL_OPTIONS.map((option) => (
                 <button
@@ -410,7 +617,25 @@ export default function Composer() {
                     setModelMenu(false);
                   }}
                 >
-                  {option}{settings.model === option ? ' ✓' : ''}
+                  {option}
+                  {settings.model === option ? ' ✓' : ''}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {promptMenu ? (
+            <div className="prompt-menu" role="menu" aria-label="快捷提示词模板">
+              {PROMPT_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  role="menuitem"
+                  className="prompt-menu-item"
+                  onClick={() => insertTemplate(tpl)}
+                >
+                  <span className="prompt-menu-title">{tpl.label}</span>
+                  <span className="prompt-menu-hint">{tpl.hint}</span>
                 </button>
               ))}
             </div>
@@ -426,6 +651,29 @@ export default function Composer() {
         >
           {streaming ? <StopIcon size={18} /> : <SendIcon size={20} />}
         </button>
+      </div>
+
+      <div className="composer-meta-bar">
+        <span className="composer-hints">
+          <kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行 · <kbd>Esc</kbd> 停止生成
+        </span>
+        <span className="composer-meta-right">
+          {charCount > 0 ? (
+            <button
+              type="button"
+              className="composer-clear-btn"
+              onClick={() => {
+                setText('');
+                textareaRef.current?.focus();
+              }}
+            >
+              清空
+            </button>
+          ) : null}
+          <span className={`composer-char-count${charCount > 2000 ? ' is-long' : ''}`}>
+            {charCount} 字
+          </span>
+        </span>
       </div>
     </div>
   );

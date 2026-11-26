@@ -10,6 +10,10 @@ import type {
 
 export type PublicSiteConfig = Record<string, unknown>;
 
+function isPrivateKey(key: string): boolean {
+  return key.startsWith("private:");
+}
+
 function parseValue(value: string | null): unknown {
   if (value === null) return "";
   try {
@@ -49,6 +53,7 @@ export function createSiteConfigService(db: AppDatabase) {
 
       const result: PublicSiteConfig = {};
       for (const row of rows) {
+        if (isPrivateKey(row.key)) continue;
         result[row.key] = parseValue(row.value);
       }
       return result;

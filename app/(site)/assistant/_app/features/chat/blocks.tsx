@@ -105,14 +105,23 @@ export function ThinkingView({
 
   return (
     <div className={`thinking ${open ? 'is-open' : ''} ${streaming ? 'is-streaming' : ''}`}>
-      <button type="button" className="thinking-head" onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className="thinking-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <span className="thinking-ico">
           <BrainIcon size={15} />
         </span>
         <span className="thinking-label">
           {streaming && empty ? '正在深度思考…' : streaming ? `深度思考中 ${seconds}s` : '已深度思考'}
         </span>
+        {!streaming && !empty ? (
+          <span className="thinking-meta">{text.length} 字</span>
+        ) : null}
         {streaming ? <span className="thinking-dots" aria-hidden /> : null}
+        <span className="thinking-toggle-hint">{open ? '收起' : '展开'}</span>
         <ChevronDownIcon size={16} className="thinking-chev" />
       </button>
       {open ? (
@@ -132,6 +141,7 @@ function SiteBadge({ name, icon }: { name?: string | null; icon?: string | null 
   const [broken, setBroken] = useState(false);
   if (icon && !broken) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element -- 任意外部搜索站点图标无法走 next/image 域名白名单
       <img
         className="site-badge"
         src={icon}
@@ -158,6 +168,7 @@ function SearchResultList({ items }: { items: WebSearchResultItem[] }) {
             target="_blank"
             rel="noopener noreferrer"
           >
+            {/* eslint-disable-next-line @next/next/no-img-element -- 外部搜索图片域名不固定 */}
             <img src={item.image_url ?? ''} alt={item.title ?? ''} loading="lazy" referrerPolicy="no-referrer" />
             {item.site_name ? <span className="image-site">{item.site_name}</span> : null}
           </a>
@@ -232,8 +243,13 @@ export function ToolCallCard({
   const Icon = isSearch ? (kind.startsWith('deep') ? BrainIcon : SearchIcon) : pattern ? SearchIcon : call.name === 'deepseek_read_url' ? LinkIcon : BookIcon;
 
   return (
-    <div className={`tool-card tool-${kind}`}>
-      <button type="button" className="tool-head" onClick={() => setOpen((v) => !v)}>
+    <div className={`tool-card tool-${kind}${open ? ' is-open' : ''}${searchError || fetchError ? ' is-error' : ''}`}>
+      <button
+        type="button"
+        className="tool-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <span className="tool-ico">
           <Icon size={15} />
         </span>
@@ -255,7 +271,13 @@ export function ToolCallCard({
                 ? hostOf(url)
                 : ''}
         </span>
-        {searchError || fetchError ? <span className="tool-error">失败</span> : null}
+        {searchError || fetchError ? (
+          <span className="tool-error">失败</span>
+        ) : results.length > 0 ? (
+          <span className="tool-ok">{results.length} 条结果</span>
+        ) : page ? (
+          <span className="tool-ok">已读取</span>
+        ) : null}
         <ChevronDownIcon size={15} className="tool-chev" />
       </button>
 
@@ -317,8 +339,13 @@ export function ClientToolCard({ block }: { block: ToolUseBlock }) {
   const failed = Boolean(result?.is_error);
 
   return (
-    <div className={`tool-card tool-client ${failed ? 'is-error' : ''}`}>
-      <button type="button" className="tool-head" onClick={() => setOpen((v) => !v)}>
+    <div className={`tool-card tool-client${open ? ' is-open' : ''}${failed ? ' is-error' : ''}`}>
+      <button
+        type="button"
+        className="tool-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <span className="tool-ico tool-ico-client">
           <SparkIcon size={15} />
         </span>

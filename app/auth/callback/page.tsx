@@ -7,7 +7,7 @@ import { getGithubUser } from "@/lib/api/github-auth";
 
 function safeRedirect(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/messages";
+    return "/";
   }
   return value;
 }

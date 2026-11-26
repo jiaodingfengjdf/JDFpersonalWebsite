@@ -1,17 +1,41 @@
 import type { Metadata } from "next";
 import { buildPageMetadata } from "@/lib/page-metadata";
+import { getAdminSession } from "@/server/auth/guard";
+import { loadAssistantPublicConfig } from "@/server/modules/assistant";
 import { loadSiteSettings } from "@/server/modules/site-settings";
 import AssistantRuntime from "./AssistantRuntime";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
-  const { profile } = await loadSiteSettings();
+  const [{ profile }, publicConfig] = await Promise.all([
+    loadSiteSettings(),
+    loadAssistantPublicConfig(),
+  ]);
+  const title = publicConfig.displayName || "私人 AI 助理";
   return buildPageMetadata({
-    title: `私人 AI 助理 · ${profile.siteTitle}`,
-    description: "站内 AI 助理（DeepSeek）：对话、记忆与设置只保存在本机浏览器。",
+    title: `${title} · ${profile.siteTitle}`,
+    description:
+      publicConfig.welcomeMessage ||
+      "站内 AI 助理：支持深度思考、联网检索与文档解析，设置仅限站长管理。",
     path: "/assistant",
   });
 }
 
-export default function AssistantPage() {
-  return <AssistantRuntime />;
+export default async function AssistantPage() {
+  const [admin, publicConfig] = await Promise.all([
+    getAdminSession(),
+    loadAssistantPublicConfig(),
+  ]);
+
+  return (
+    <AssistantRuntime
+      initialAuth={{
+        isAdmin: Boolean(admin),
+        adminUsername: admin?.username ?? null,
+        authLoaded: true,
+      }}
+      initialPublicConfig={publicConfig}
+    />
+  );
 }

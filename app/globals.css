@@ -8,15 +8,35 @@ html {
   overflow-y: scroll;
 }
 
-/* 禁用页面文字选中（输入框和代码块除外） */
+/* 默认禁用控件与导航区域误选；正文、表格、代码块与输入框允许自由选中复制 */
 body {
   -webkit-user-select: none;
   user-select: none;
 }
 
-input, textarea, [contenteditable], .prose, code, pre {
+article,
+p,
+li,
+pre,
+code,
+blockquote,
+td,
+th,
+dd,
+dt,
+input,
+textarea,
+[contenteditable],
+.prose,
+[data-selectable] {
   -webkit-user-select: text;
   user-select: text;
+}
+
+button,
+nav {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ========== 毛玻璃基础样式 ========== */

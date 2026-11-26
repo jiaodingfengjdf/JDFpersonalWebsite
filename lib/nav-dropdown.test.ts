@@ -94,10 +94,10 @@ describe("parseNavDropdownConfig", () => {
 
   it("supports the items alias used by older values", () => {
     const config = parseNavDropdownConfig({
-      items: [{ name: "友链", url: "/friends" }],
+      items: [{ name: "项目", url: "/projects" }],
     });
 
-    expect(config.links).toEqual([{ label: "友链", href: "/friends", description: "" }]);
+    expect(config.links).toEqual([{ label: "项目", href: "/projects", description: "" }]);
   });
 });
 

@@ -3,9 +3,18 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, Heart, Send, Reply, ChevronDown, ChevronUp, LogOut } from "lucide-react";
+import {
+  MessageCircle,
+  Heart,
+  Send,
+  Reply,
+  ChevronDown,
+  ChevronUp,
+  LogOut,
+} from "lucide-react";
 import { bypassImageOptimization } from "@/lib/image";
 import { formatRelativeTime } from "@/lib/format";
+import { useToast } from "@/components/providers/ToastProvider";
 import {
   getPostComments,
   createComment,
@@ -28,7 +37,7 @@ function GithubIcon({ className }: { className?: string }) {
 
 function flattenReplies(
   replies: CommentItem[],
-  parentMap?: Map<number, string>
+  parentMap?: Map<number, string>,
 ): (CommentItem & { replyToUser?: string })[] {
   const map = parentMap ?? new Map<number, string>();
   const result: (CommentItem & { replyToUser?: string })[] = [];
@@ -44,6 +53,7 @@ function flattenReplies(
 }
 
 export default function PostComments({ postId }: { postId: number }) {
+  const { addToast } = useToast();
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -51,18 +61,29 @@ export default function PostComments({ postId }: { postId: number }) {
     if (typeof window === "undefined") return null;
     const saved = localStorage.getItem("github_user");
     if (saved) {
-      try { return JSON.parse(saved); } catch { return null; }
+      try {
+        return JSON.parse(saved) as GitHubUser;
+      } catch {
+        return null;
+      }
     }
     return null;
   });
   const [inputValue, setInputValue] = useState("");
   const [replyTo, setReplyTo] = useState<CommentItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [expandedReplies, setExpandedReplies] = useState<Set<number>>(new Set());
+  const [expandedReplies, setExpandedReplies] = useState<Set<number>>(
+    new Set(),
+  );
   const [likedIds, setLikedIds] = useState<Set<number>>(() => {
     if (typeof window === "undefined") return new Set();
     const saved = localStorage.getItem("liked_comments");
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    if (!saved) return new Set();
+    try {
+      return new Set(JSON.parse(saved) as number[]);
+    } catch {
+      return new Set();
+    }
   });
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -81,22 +102,42 @@ export default function PostComments({ postId }: { postId: number }) {
 
   useEffect(() => {
     let active = true;
-    getPostComments(postId).then((data) => {
-      if (active) {
-        setComments(data);
-        setLoading(false);
-      }
-    }).catch(() => {
-      if (active) {
-        setLoading(false);
-        setLoadError(true);
-      }
-    });
-    return () => { active = false; };
+    getPostComments(postId)
+      .then((data) => {
+        if (active) {
+          setComments(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLoading(false);
+          setLoadError(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [postId]);
 
+  // 按 Escape 取消当前回复对象
+  useEffect(() => {
+    if (!replyTo) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setReplyTo(null);
+        setInputValue("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [replyTo]);
+
   function handleLogin() {
-    sessionStorage.setItem("github_redirect", window.location.pathname);
+    sessionStorage.setItem(
+      "github_redirect",
+      window.location.pathname + window.location.search,
+    );
     window.location.href = "/api/auth/github/login";
   }
 
@@ -121,25 +162,30 @@ export default function PostComments({ postId }: { postId: number }) {
           prev.map((c) =>
             c.id === parentId
               ? { ...c, replies: [...c.replies, newComment] }
-              : c
-          )
+              : c,
+          ),
         );
         setExpandedReplies((prev) => new Set([...prev, parentId]));
+        addToast("success", "回复已发布");
       } else {
         setComments((prev) => [...prev, newComment]);
+        addToast("success", "评论已发布");
       }
       setInputValue("");
       setReplyTo(null);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "发送失败";
-      alert(msg);
+      const msg = e instanceof Error ? e.message : "评论发送失败，请稍后重试";
+      addToast("error", msg);
     } finally {
       setSubmitting(false);
     }
   }
 
-  function findTopLevelId(comments: CommentItem[], targetId: number): number | null {
-    for (const c of comments) {
+  function findTopLevelId(
+    list: CommentItem[],
+    targetId: number,
+  ): number | null {
+    for (const c of list) {
       if (c.id === targetId) return c.id;
       for (const r of c.replies ?? []) {
         if (r.id === targetId) return c.id;
@@ -188,12 +234,14 @@ export default function PostComments({ postId }: { postId: number }) {
           return {
             ...c,
             replies: c.replies.map((r) =>
-              r.id === commentId ? { ...r, likes: updated.likes } : r
+              r.id === commentId ? { ...r, likes: updated.likes } : r,
             ),
           };
-        })
+        }),
       );
-    } catch {}
+    } catch {
+      addToast("error", "点赞失败，请稍后重试");
+    }
   }
 
   return (
@@ -202,6 +250,11 @@ export default function PostComments({ postId }: { postId: number }) {
         <MessageCircle className="w-5 h-5 md:w-6 md:h-6 text-sky-500" />
         <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-100">
           评论
+          {comments.length > 0 && (
+            <span className="ml-2 text-xs md:text-sm font-normal text-slate-500 dark:text-slate-400">
+              ({comments.length})
+            </span>
+          )}
         </h2>
       </div>
 
@@ -213,7 +266,7 @@ export default function PostComments({ postId }: { postId: number }) {
         className="mb-4"
       >
         {user ? (
-          <div className="flex items-center gap-2 md:gap-3 px-3 py-2 md:px-5 md:py-3 rounded-2xl bg-white/50 dark:bg-slate-800/60 backdrop-blur-xl border border-white/30 dark:border-white/10">
+          <div className="flex items-center gap-2 md:gap-3 px-3 py-2 md:px-5 md:py-3 rounded-2xl bg-white/65 dark:bg-slate-800/70 backdrop-blur-xl border border-white/40 dark:border-white/10">
             <Image
               src={user.avatar}
               alt={user.login}
@@ -235,7 +288,7 @@ export default function PostComments({ postId }: { postId: number }) {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-400 hover:text-red-500 transition-colors px-1.5 md:px-2 py-0.5 md:py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+              className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-400 hover:text-red-500 transition-colors px-1.5 md:px-2 py-0.5 md:py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-2 focus-visible:outline-sky-500"
             >
               <LogOut className="w-3 h-3 md:w-3.5 md:h-3.5" />
               退出
@@ -245,7 +298,7 @@ export default function PostComments({ postId }: { postId: number }) {
           <button
             type="button"
             onClick={handleLogin}
-            className="flex items-center gap-2 md:gap-3 px-3 py-2 md:px-5 md:py-3 rounded-2xl bg-white/50 dark:bg-slate-800/60 backdrop-blur-xl border border-white/30 dark:border-white/10 hover:border-slate-300 dark:hover:border-slate-600 transition-all group w-full"
+            className="flex items-center gap-2 md:gap-3 px-3 py-2 md:px-5 md:py-3 rounded-2xl bg-white/65 dark:bg-slate-800/70 backdrop-blur-xl border border-white/40 dark:border-white/10 hover:border-sky-400/50 transition-all group w-full focus-visible:outline-2 focus-visible:outline-sky-500"
           >
             <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-slate-900 dark:bg-white flex items-center justify-center">
               <GithubIcon className="w-4 h-4 md:w-5 md:h-5 text-white dark:text-slate-900" />
@@ -269,7 +322,7 @@ export default function PostComments({ postId }: { postId: number }) {
         transition={{ duration: 0.4, delay: 0.1 }}
         className="mb-5 md:mb-8"
       >
-        <div className="rounded-2xl bg-white/50 dark:bg-slate-800/60 backdrop-blur-xl border border-white/30 dark:border-white/10 overflow-hidden">
+        <div className="rounded-2xl bg-white/65 dark:bg-slate-800/70 backdrop-blur-xl border border-white/40 dark:border-white/10 overflow-hidden">
           <AnimatePresence>
             {replyTo && (
               <motion.div
@@ -279,7 +332,7 @@ export default function PostComments({ postId }: { postId: number }) {
                 className="overflow-hidden"
               >
                 <div className="flex items-center gap-1.5 md:gap-2 px-3 pt-2 md:px-5 md:pt-3 pb-0 text-[10px] md:text-xs text-slate-500 dark:text-slate-400">
-                  <Reply className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                  <Reply className="w-3 h-3 md:w-3.5 md:h-3.5 text-sky-500" />
                   <span>
                     回复{" "}
                     <span className="font-medium text-sky-600 dark:text-sky-400">
@@ -291,8 +344,9 @@ export default function PostComments({ postId }: { postId: number }) {
                   </span>
                   <button
                     type="button"
+                    aria-label="取消回复"
                     onClick={cancelReply}
-                    className="text-slate-400 hover:text-red-500 transition-colors ml-1 md:ml-2"
+                    className="text-slate-400 hover:text-red-500 transition-colors ml-1 md:ml-2 px-1 rounded focus-visible:outline-2 focus-visible:outline-sky-500"
                   >
                     ✕
                   </button>
@@ -309,7 +363,7 @@ export default function PostComments({ postId }: { postId: number }) {
               placeholder={
                 user
                   ? replyTo
-                    ? "写下你的回复..."
+                    ? "写下你的回复...（按 Esc 取消回复）"
                     : "说点什么吧..."
                   : "登录后即可评论..."
               }
@@ -318,19 +372,22 @@ export default function PostComments({ postId }: { postId: number }) {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   handleSubmit();
+                } else if (e.key === "Escape" && replyTo) {
+                  e.preventDefault();
+                  cancelReply();
                 }
               }}
               className="w-full bg-transparent text-xs md:text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
             />
             <div className="flex items-center justify-between mt-2 pt-2 md:mt-3 md:pt-3 border-t border-slate-200/50 dark:border-white/5">
               <span className="text-[10px] md:text-xs text-slate-400">
-                {"Ctrl + Enter 发送"}
+                {replyTo ? "Ctrl + Enter 发送 · Esc 取消回复" : "Ctrl + Enter 发送"}
               </span>
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={!user || !inputValue.trim() || submitting}
-                className="flex items-center gap-1 md:gap-1.5 px-3 py-1 md:px-4 md:py-1.5 rounded-full bg-sky-500 text-white text-[10px] md:text-xs font-medium hover:bg-sky-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="flex items-center gap-1 md:gap-1.5 px-3.5 py-1.5 md:px-4 md:py-1.5 rounded-full bg-sky-600 text-white text-[10px] md:text-xs font-medium hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all focus-visible:outline-2 focus-visible:outline-sky-500"
               >
                 <Send className="w-3 h-3 md:w-3.5 md:h-3.5" />
                 {submitting ? "发送中..." : replyTo ? "回复" : "发送"}
@@ -342,25 +399,30 @@ export default function PostComments({ postId }: { postId: number }) {
 
       {/* 加载出错 */}
       {loadError && (
-        <div className="text-center py-8 md:py-12 text-slate-400">
-          <MessageCircle className="w-8 h-8 md:w-10 md:h-10 mx-auto mb-2 md:mb-3 opacity-40" />
+        <div
+          role="alert"
+          className="text-center py-8 md:py-12 rounded-2xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-rose-500/25 text-slate-500 dark:text-slate-300"
+        >
+          <MessageCircle className="w-8 h-8 md:w-10 md:h-10 mx-auto mb-2 md:mb-3 opacity-40 text-rose-400" />
           <p className="text-xs md:text-sm mb-3">评论加载失败</p>
           <button
             type="button"
             onClick={() => {
               setLoadError(false);
               setLoading(true);
-              getPostComments(postId).then((data) => {
-                setComments(data);
-                setLoading(false);
-              }).catch(() => {
-                setLoading(false);
-                setLoadError(true);
-              });
+              getPostComments(postId)
+                .then((data) => {
+                  setComments(data);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                  setLoadError(true);
+                });
             }}
-            className="text-[10px] md:text-xs text-sky-500 hover:text-sky-600 transition-colors underline underline-offset-2"
+            className="px-3.5 py-1.5 rounded-full text-xs font-medium bg-sky-600 text-white hover:bg-sky-700 transition-colors focus-visible:outline-2 focus-visible:outline-sky-500"
           >
-            重新加载
+            重试
           </button>
         </div>
       )}
@@ -377,7 +439,10 @@ export default function PostComments({ postId }: { postId: number }) {
       {loading && (
         <div className="space-y-3">
           {[1, 2].map((i) => (
-            <div key={i} className="h-16 md:h-20 rounded-2xl bg-white/40 dark:bg-slate-800/40 animate-pulse" />
+            <div
+              key={i}
+              className="h-16 md:h-20 rounded-2xl bg-white/50 dark:bg-slate-800/50 animate-pulse"
+            />
           ))}
         </div>
       )}
@@ -389,7 +454,7 @@ export default function PostComments({ postId }: { postId: number }) {
             key={comment.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: idx * 0.05 }}
+            transition={{ duration: 0.4, delay: Math.min(idx, 6) * 0.05 }}
           >
             <CommentCard
               comment={comment}
@@ -426,7 +491,7 @@ function CommentCard({
   const replyCount = flat.length;
 
   return (
-    <div className="rounded-2xl bg-white/50 dark:bg-slate-800/60 backdrop-blur-xl border border-white/30 dark:border-white/10 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
+    <div className="rounded-2xl bg-white/65 dark:bg-slate-800/70 backdrop-blur-xl border border-white/40 dark:border-white/10 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
       <div className="p-3 md:p-5">
         <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
           {comment.github_user ? (
@@ -453,7 +518,10 @@ function CommentCard({
               </p>
             )}
           </div>
-          <span className="text-[10px] md:text-xs text-slate-400 dark:text-slate-500 shrink-0">
+          <span
+            suppressHydrationWarning
+            className="text-[10px] md:text-xs text-slate-400 dark:text-slate-500 shrink-0"
+          >
             {formatRelativeTime(comment.created_at)}
           </span>
         </div>
@@ -466,7 +534,7 @@ function CommentCard({
           <button
             type="button"
             onClick={() => onLike(comment.id)}
-            className={`flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs transition-colors ${
+            className={`flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs transition-colors rounded focus-visible:outline-2 focus-visible:outline-sky-500 ${
               likedIds.has(comment.id)
                 ? "text-pink-500"
                 : "text-slate-400 hover:text-pink-500"
@@ -483,7 +551,7 @@ function CommentCard({
           <button
             type="button"
             onClick={() => onReply(comment)}
-            className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-400 hover:text-sky-500 transition-colors"
+            className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-400 hover:text-sky-500 transition-colors rounded focus-visible:outline-2 focus-visible:outline-sky-500"
           >
             <MessageCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
             <span>回复</span>
@@ -493,7 +561,7 @@ function CommentCard({
             <button
               type="button"
               onClick={() => onToggleReplies(comment.id)}
-              className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-400 hover:text-blue-500 transition-colors ml-auto"
+              className="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs text-slate-400 hover:text-sky-500 transition-colors ml-auto rounded focus-visible:outline-2 focus-visible:outline-sky-500"
             >
               {isExpanded ? (
                 <ChevronUp className="w-3 h-3 md:w-3.5 md:h-3.5" />
@@ -566,7 +634,10 @@ function ReplyCard({
             <span className="text-[10px] md:text-xs font-semibold text-slate-700 dark:text-slate-300">
               {reply.github_user?.login ?? "匿名用户"}
             </span>
-            <span className="text-[10px] md:text-xs text-slate-400">
+            <span
+              suppressHydrationWarning
+              className="text-[10px] md:text-xs text-slate-400"
+            >
               {formatRelativeTime(reply.created_at)}
             </span>
           </div>
@@ -582,7 +653,7 @@ function ReplyCard({
             <button
               type="button"
               onClick={() => onLike(reply.id)}
-              className={`flex items-center gap-0.5 md:gap-1 text-[10px] md:text-xs transition-colors ${
+              className={`flex items-center gap-0.5 md:gap-1 text-[10px] md:text-xs transition-colors rounded focus-visible:outline-2 focus-visible:outline-sky-500 ${
                 likedIds.has(reply.id)
                   ? "text-pink-500"
                   : "text-slate-400 hover:text-pink-500"
@@ -598,7 +669,7 @@ function ReplyCard({
             <button
               type="button"
               onClick={() => onReply(reply)}
-              className="flex items-center gap-0.5 md:gap-1 text-[10px] md:text-xs text-slate-400 hover:text-sky-500 transition-colors"
+              className="flex items-center gap-0.5 md:gap-1 text-[10px] md:text-xs text-slate-400 hover:text-sky-500 transition-colors rounded focus-visible:outline-2 focus-visible:outline-sky-500"
             >
               <Reply className="w-3 h-3 md:w-3.5 md:h-3.5" />
               <span>回复</span>

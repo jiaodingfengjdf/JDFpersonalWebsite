@@ -11,7 +11,11 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { isSafeCoverUrl, type LibraryBookView } from "@/server/modules/library/contracts";
+import {
+  BOOK_CATEGORIES,
+  isSafeCoverUrl,
+  type LibraryBookView,
+} from "@/server/modules/library/contracts";
 
 const STATUS: Array<{ value: string; label: string }> = [
   { value: "unread", label: "未读" },
@@ -32,6 +36,46 @@ function coverFileProblem(file: File): string | null {
   return null;
 }
 
+function CategoryRowInput({
+  book,
+  onSave,
+}: {
+  book: LibraryBookView;
+  onSave: (category: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(book.category);
+
+  function commit() {
+    const next = draft.trim();
+    if (next !== book.category) {
+      void onSave(next);
+    } else if (draft !== book.category) {
+      setDraft(book.category);
+    }
+  }
+
+  return (
+    <Input
+      list="book-categories"
+      value={draft}
+      maxLength={40}
+      aria-label={`《${book.title}》分类`}
+      placeholder="分类"
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          setDraft(book.category);
+          event.currentTarget.blur();
+        }
+      }}
+      className="h-9 w-28 text-xs"
+    />
+  );
+}
+
 export default function LibraryManager() {
   const confirm = useConfirm();
   const [books, setBooks] = useState<LibraryBookView[]>([]);
@@ -40,6 +84,7 @@ export default function LibraryManager() {
   const [message, setMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [author, setAuthor] = useState("");
+  const [category, setCategory] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverUrlInput, setCoverUrlInput] = useState("");
   const [coverPreview, setCoverPreview] = useState("");
@@ -97,6 +142,7 @@ export default function LibraryManager() {
       const body = new FormData();
       body.append("file", file);
       if (author.trim()) body.append("author", author.trim());
+      if (category.trim()) body.append("category", category.trim());
       if (coverFile) body.append("cover", coverFile);
       else if (coverUrlInput.trim()) body.append("cover", coverUrlInput.trim());
       const created = await adminRequest<{ id: number; totalUnits: number }>(
@@ -120,6 +166,7 @@ export default function LibraryManager() {
         body: JSON.stringify({
           title: book.title,
           author: book.author,
+          category: book.category,
           status: book.status,
           rating: book.rating,
           note: book.note,
@@ -202,6 +249,12 @@ export default function LibraryManager() {
       {error && <AdminError message={error} />}
       {message && <p className="text-sm text-emerald-600">{message}</p>}
 
+      <datalist id="book-categories">
+        {BOOK_CATEGORIES.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
+
       <Card>
         <CardHeader>
           <CardTitle>上传书籍</CardTitle>
@@ -213,6 +266,17 @@ export default function LibraryManager() {
               value={author}
               onChange={(event) => setAuthor(event.target.value)}
               placeholder="刘慈欣"
+              className="w-40"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>分类（可选）</Label>
+            <Input
+              list="book-categories"
+              value={category}
+              maxLength={40}
+              onChange={(event) => setCategory(event.target.value)}
+              placeholder="如：技术、科幻"
               className="w-40"
             />
           </div>
@@ -300,7 +364,13 @@ export default function LibraryManager() {
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{book.title}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {[book.author, book.format.toUpperCase(), `${(book.bytes / 1024 / 1024).toFixed(1)}MB`, `${book.total_units} 章`]
+                {[
+                  book.author,
+                  book.category,
+                  book.format.toUpperCase(),
+                  `${(book.bytes / 1024 / 1024).toFixed(1)}MB`,
+                  `${book.total_units} 章`,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
                 {book.progress ? ` · 读到 ${book.progress.percent.toFixed(0)}%` : ""}
@@ -327,6 +397,11 @@ export default function LibraryManager() {
                 </div>
               )}
             </div>
+            <CategoryRowInput
+              key={`${book.id}-${book.category}`}
+              book={book}
+              onSave={(nextCategory) => patch(book, { category: nextCategory })}
+            />
             <Select
               value={book.status}
               onChange={(event) => void patch(book, { status: event.target.value })}

@@ -1,219 +1,435 @@
-/*
- * Markdown 阅读样式（手机优先）。
- * 所有规则都收在 .md 下面，不写全局 * 重置，避免影响组件外部。
- * 颜色优先跟随 app.css 的主题变量；同时保留字面量 fallback，
- * 并用 :root[data-theme='dark'] 显式覆盖一套深色值。
- */.md{
-  /* 文字 / 边框 / 强调色：跟随应用主题，首帧 data-theme 还没落到 <html> 时也不会读不清 */
-  --md-text: var(--text, #1c1f24);
-  --md-muted: var(--text-2, #667085);
-  --md-border: var(--border, rgba(16, 24, 40, 0.12));
-  --md-link: var(--accent, #2563eb);
-  --md-accent: var(--accent, #3b82f6);
-  --md-inline-bg: var(--surface-strong, rgba(16, 24, 40, 0.06));
-  --md-cite-bg: var(--accent-soft, rgba(59, 130, 246, 0.12));
-  --md-thead-bg: var(--surface, rgba(16, 24, 40, 0.04));
+/* ==========================================================================
+   Markdown 阅读样式 · 严格收敛在 .assistant-root .md 作用域下
+   - 对齐全站晴空蓝 #0284C7（浅色）/ 天青 #38BDF8（深色）与磨砂玻璃语言
+   - 不写全局重置，零样式泄漏
+   ========================================================================== */
 
-  /* 代码块在浅色主题下也保持深色，语法配色只需要一套 */
-  --code-bg: #12161f;
-  --code-head-bg: rgba(255, 255, 255, 0.05);
-  --code-fg: #e6e9ef;
-  --code-muted: rgba(230, 233, 239, 0.62);
-  --code-border: rgba(255, 255, 255, 0.08);
+.assistant-root .md {
+  --md-text: var(--text, #1e293b);
+  --md-muted: var(--text-2, #475569);
+  --md-border: var(--border, rgba(148, 163, 184, 0.28));
+  --md-link: var(--accent, #0284c7);
+  --md-accent: var(--accent, #0284c7);
+  --md-inline-bg: rgba(2, 132, 199, 0.08);
+  --md-inline-border: rgba(2, 132, 199, 0.16);
+  --md-inline-fg: #0369a1;
+  --md-quote-bg: rgba(2, 132, 199, 0.06);
+  --md-cite-bg: var(--accent-soft, rgba(2, 132, 199, 0.12));
+  --md-thead-bg: rgba(2, 132, 199, 0.06);
+  --md-row-alt: rgba(148, 163, 184, 0.05);
 
-  /* highlight.js 语义色（只作用于 .md 内部，不引入全局主题文件） */
-  --hl-keyword: #c792ea;
-  --hl-string: #a5e075;
-  --hl-number: #f6c177;
-  --hl-comment: #6b7688;
-  --hl-function: #82aaff;
-  --hl-attr: #ffcb6b;
-  --hl-builtin: #89ddff;
-  --hl-meta: #7f8ea3;
+  /* 代码块统一深邃午夜石板蓝，浅/深双主题下保持高对比度与精致质感 */
+  --code-bg: #0b1120;
+  --code-head-bg: rgba(30, 41, 59, 0.72);
+  --code-fg: #e2e8f0;
+  --code-muted: rgba(203, 213, 225, 0.72);
+  --code-border: rgba(148, 163, 184, 0.18);
+  --code-scroll-thumb: rgba(56, 189, 248, 0.34);
+  --code-scroll-hover: rgba(56, 189, 248, 0.62);
+
+  /* highlight.js 语义色（仅作用于 .assistant-root .md 内部） */
+  --hl-keyword: #c4b5fd;
+  --hl-string: #86efac;
+  --hl-number: #fdba74;
+  --hl-comment: #64748b;
+  --hl-function: #7dd3fc;
+  --hl-attr: #fde68a;
+  --hl-builtin: #67e8f9;
+  --hl-meta: #94a3b8;
 
   box-sizing: border-box;
   min-width: 0;
   font-family: var(
     --font,
+    ui-sans-serif,
+    system-ui,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',
-    system-ui,
     sans-serif
   );
-  font-size: 16px;
-  line-height: 1.72;
-  color: var(--md-text, #1c1f24);
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: var(--md-text);
   word-break: break-word;
   overflow-wrap: anywhere;
   -webkit-tap-highlight-color: transparent;
-}.assistant-root[data-theme='dark'] .md{
-  --md-text: #e8eaef;
-  --md-muted: #9aa4b2;
-  --md-border: rgba(255, 255, 255, 0.14);
-  --md-link: #7cb0ff;
-  --md-accent: #5b9dff;
-  --md-inline-bg: rgba(255, 255, 255, 0.1);
-  --md-cite-bg: rgba(91, 157, 255, 0.18);
-  --md-thead-bg: rgba(255, 255, 255, 0.06);
-}/* ------------------------------------------------------------------ */
+}
+
+html.dark .assistant-root .md,
+.dark .assistant-root .md {
+  --md-text: var(--text, #f1f5f9);
+  --md-muted: var(--text-2, #cbd5e1);
+  --md-border: rgba(148, 163, 184, 0.2);
+  --md-link: #38bdf8;
+  --md-accent: #38bdf8;
+  --md-inline-bg: rgba(56, 189, 248, 0.13);
+  --md-inline-border: rgba(56, 189, 248, 0.22);
+  --md-inline-fg: #7dd3fc;
+  --md-quote-bg: rgba(56, 189, 248, 0.08);
+  --md-cite-bg: rgba(56, 189, 248, 0.18);
+  --md-thead-bg: rgba(56, 189, 248, 0.09);
+  --md-row-alt: rgba(255, 255, 255, 0.025);
+  --code-bg: rgba(9, 14, 28, 0.92);
+  --code-head-bg: rgba(30, 41, 59, 0.65);
+  --code-border: rgba(148, 163, 184, 0.16);
+}
+
+/* ------------------------------------------------------------------ */
 /* 文本块                                                              */
 /* ------------------------------------------------------------------ */
 
-.md > :first-child{
+.assistant-root .md > :first-child {
   margin-top: 0;
-}.md > :last-child{
+}
+
+.assistant-root .md > :last-child {
   margin-bottom: 0;
-}.md p{
+}
+
+.assistant-root .md p {
   margin: 0 0 0.85em;
-}.md h1, .md h2, .md h3, .md h4, .md h5, .md h6{
-  margin: 1.35em 0 0.5em;
-  font-weight: 600;
-  line-height: 1.35;
+}
+
+.assistant-root .md h1,
+.assistant-root .md h2,
+.assistant-root .md h3,
+.assistant-root .md h4,
+.assistant-root .md h5,
+.assistant-root .md h6 {
+  margin: 1.3em 0 0.5em;
+  font-weight: 650;
+  line-height: 1.38;
   letter-spacing: 0.01em;
-}.md h1{
+  color: var(--md-text);
+}
+
+.assistant-root .md h1 {
   font-size: 1.32em;
-}.md h2{
-  font-size: 1.2em;
-}.md h3{
-  font-size: 1.08em;
-}.md h4{
+}
+
+.assistant-root .md h2 {
+  font-size: 1.18em;
+}
+
+.assistant-root .md h3 {
+  font-size: 1.07em;
+}
+
+.assistant-root .md h4 {
   font-size: 1em;
-}.md h5, .md h6{
+}
+
+.assistant-root .md h5,
+.assistant-root .md h6 {
   font-size: 0.94em;
-  color: var(--md-muted, #667085);
-}.md a{
-  color: var(--md-link, #2563eb);
+  color: var(--md-muted);
+}
+
+.assistant-root .md a {
+  color: var(--md-link);
   text-decoration: underline;
   text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--md-link) 45%, transparent);
   overflow-wrap: anywhere;
-}.md strong{
-  font-weight: 600;
-}.md hr{
-  margin: 1.4em 0;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.assistant-root .md a:hover {
+  text-decoration-color: var(--md-link);
+}
+
+.assistant-root .md strong {
+  font-weight: 650;
+}
+
+.assistant-root .md hr {
+  margin: 1.35em 0;
   border: 0;
-  border-top: 1px solid var(--md-border, rgba(16, 24, 40, 0.12));
-}.md blockquote{
-  margin: 0.75em 0;
-  padding: 0.1em 0 0.1em 0.85em;
-  border-left: 2px solid var(--md-accent, #3b82f6);
-  color: var(--md-muted, #667085);
-}.md blockquote > :last-child{
+  border-top: 1px solid var(--md-border);
+}
+
+.assistant-root .md blockquote {
+  margin: 0.85em 0;
+  padding: 0.55em 0.9em;
+  border-left: 3px solid var(--md-accent);
+  border-radius: 0 10px 10px 0;
+  background: var(--md-quote-bg);
+  color: var(--md-muted);
+}
+
+.assistant-root .md blockquote > :last-child {
   margin-bottom: 0;
-}/* ------------------------------------------------------------------ */
+}
+
+/* ------------------------------------------------------------------ */
 /* 列表                                                                */
 /* ------------------------------------------------------------------ */
 
-.md ul, .md ol{
-  margin: 0.35em 0 0.85em;
-  padding-left: 1.25em;
-}.md li{
-  margin: 0.18em 0;
-}.md li > p{
+.assistant-root .md ul,
+.assistant-root .md ol {
+  margin: 0.4em 0 0.9em;
+  padding-left: 1.35em;
+}
+
+.assistant-root .md li {
+  margin: 0.24em 0;
+}
+
+.assistant-root .md li::marker {
+  color: var(--md-accent);
+}
+
+.assistant-root .md li > p {
   margin: 0;
-}.md li > ul, .md li > ol{
-  margin: 0.15em 0;
-}.md ul ul, .md ul ol, .md ol ul, .md ol ol{
-  margin: 0.15em 0;
-}/* ------------------------------------------------------------------ */
-/* 表格（内部横向滚动，不撑破消息气泡）                                 */
+}
+
+.assistant-root .md li > ul,
+.assistant-root .md li > ol,
+.assistant-root .md ul ul,
+.assistant-root .md ul ol,
+.assistant-root .md ol ul,
+.assistant-root .md ol ol {
+  margin: 0.18em 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 表格                                                                */
 /* ------------------------------------------------------------------ */
 
-.md table{
+.assistant-root .md .md-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.85em 0 1.05em;
+  border: 1px solid var(--md-border);
+  border-radius: 12px;
+  background: var(--surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.assistant-root .md .md-table-wrap::-webkit-scrollbar {
+  height: 6px;
+}
+
+.assistant-root .md .md-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.assistant-root .md table {
   display: block;
   width: max-content;
+  min-width: 100%;
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  margin: 0.7em 0 1em;
-  border-collapse: collapse;
+  margin: 0.8em 0 1em;
+  border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.94em;
-}.md table th, .md table td{
-  padding: 0.42em 0.62em;
-  border: 1px solid var(--md-border, rgba(16, 24, 40, 0.12));
+  border: 1px solid var(--md-border);
+  border-radius: 12px;
+  font-size: 0.92em;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.assistant-root .md .md-table-wrap table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.assistant-root .md table th,
+.assistant-root .md table td {
+  padding: 0.48em 0.72em;
+  border-bottom: 1px solid var(--md-border);
+  border-right: 1px solid var(--md-border);
   text-align: left;
   vertical-align: top;
-}.md table th{
-  background: var(--md-thead-bg, rgba(16, 24, 40, 0.04));
+}
+
+.assistant-root .md table tr:last-child td {
+  border-bottom: none;
+}
+
+.assistant-root .md table th:last-child,
+.assistant-root .md table td:last-child {
+  border-right: none;
+}
+
+.assistant-root .md table th {
+  background: var(--md-thead-bg);
   font-weight: 600;
   white-space: nowrap;
-}/* 短标签列（能力/键名）不换行，正文列照常换行，避免「联网搜/索」这种断字 */
-.md table th, .md table td:first-child{
+}
+
+.assistant-root .md table tbody tr:nth-child(even) {
+  background: var(--md-row-alt);
+}
+
+.assistant-root .md table td:first-child {
   white-space: nowrap;
-}/* ------------------------------------------------------------------ */
+}
+
+/* ------------------------------------------------------------------ */
 /* 行内代码 / 代码块                                                    */
 /* ------------------------------------------------------------------ */
 
-.md code{
+.assistant-root .md code {
   font-family: var(--mono, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace);
-  font-size: 0.92em;
-  padding: 0.12em 0.34em;
+  font-size: 0.88em;
+  padding: 0.14em 0.4em;
   border-radius: 6px;
-  background: var(--md-inline-bg, rgba(16, 24, 40, 0.06));
+  background: var(--md-inline-bg);
+  border: 1px solid var(--md-inline-border);
+  color: var(--md-inline-fg);
   overflow-wrap: anywhere;
-}.md .code-block{
-  margin: 0.8em 0 1em;
-  border-radius: 12px;
-  background: var(--code-bg, #12161f);
-  border: 1px solid var(--code-border, rgba(255, 255, 255, 0.08));
+}
+
+.assistant-root .md .code-block {
+  margin: 0.85em 0 1.05em;
+  border-radius: 14px;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  box-shadow: 0 10px 26px -10px rgba(15, 23, 42, 0.35);
   overflow: hidden;
-}.md .code-head{
+}
+
+.assistant-root .md .code-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 4px 0 12px;
-  background: var(--code-head-bg, rgba(255, 255, 255, 0.05));
-  border-bottom: 1px solid var(--code-border, rgba(255, 255, 255, 0.08));
-  color: var(--code-muted, rgba(230, 233, 239, 0.62));
+  min-height: 40px;
+  padding: 0 8px 0 14px;
+  background: var(--code-head-bg);
+  border-bottom: 1px solid var(--code-border);
+  color: var(--code-muted);
   font-family: var(--mono, ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.4;
-}.md .code-lang{
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
+}
+
+.assistant-root .md .code-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.assistant-root .md .code-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: 0.03em;
+  color: #7dd3fc;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}.md .code-copy{
+}
+
+.assistant-root .md .code-lang::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  opacity: 0.9;
+  flex: none;
+}
+
+.assistant-root .md .code-lines {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-root .md .code-copy {
   flex: none;
   appearance: none;
   -webkit-appearance: none;
-  min-width: 56px;
-  min-height: 44px; /* 触控区 ≥44px，方便单手拇指 */
-  padding: 0 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--code-muted, rgba(230, 233, 239, 0.62));
+  min-width: 62px;
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--code-muted);
   font-family: inherit;
-  font-size: 12px;
-  line-height: 44px;
+  font-size: 11.5px;
+  line-height: 26px;
   cursor: pointer;
   touch-action: manipulation;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}.md .code-copy:active{
-  background: rgba(255, 255, 255, 0.12);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.assistant-root .md .code-copy:hover {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.42);
+  color: #e0f2fe;
+}
+
+.assistant-root .md .code-copy:active {
+  background: rgba(56, 189, 248, 0.26);
   color: #ffffff;
-}.md .code-pre{
+}
+
+.assistant-root .md .code-copy.is-copied {
+  background: rgba(52, 211, 153, 0.16);
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #6ee7b7;
+}
+
+.assistant-root .md .code-pre {
   margin: 0;
-  padding: 12px 14px 14px;
+  padding: 13px 15px 15px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   background: transparent;
-  color: var(--code-fg, #e6e9ef);
-  font-size: 0.875rem;
-  line-height: 1.62;
-}.md .code-pre code{
+  color: var(--code-fg);
+  font-size: 0.865rem;
+  line-height: 1.65;
+  scrollbar-width: thin;
+  scrollbar-color: var(--code-scroll-thumb) transparent;
+}
+
+.assistant-root .md .code-pre::-webkit-scrollbar {
+  height: 6px;
+}
+
+.assistant-root .md .code-pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.assistant-root .md .code-pre::-webkit-scrollbar-thumb {
+  background: var(--code-scroll-thumb);
+  border-radius: 999px;
+}
+
+.assistant-root .md .code-pre::-webkit-scrollbar-thumb:hover {
+  background: var(--code-scroll-hover);
+}
+
+.assistant-root .md .code-pre code {
   display: block;
   padding: 0;
+  border: 0;
   border-radius: 0;
   background: none;
   color: inherit;
@@ -221,95 +437,158 @@
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
-}/* ------------------------------------------------------------------ */
+}
+
+/* ------------------------------------------------------------------ */
 /* highlight.js 语义色                                                 */
 /* ------------------------------------------------------------------ */
 
-.md .hljs-comment, .md .hljs-quote{
-  color: var(--hl-comment, #6b7688);
+.assistant-root .md .hljs-comment,
+.assistant-root .md .hljs-quote {
+  color: var(--hl-comment);
   font-style: italic;
-}.md .hljs-keyword, .md .hljs-selector-tag, .md .hljs-literal, .md .hljs-doctag, .md .hljs-formula{
-  color: var(--hl-keyword, #c792ea);
-}.md .hljs-string, .md .hljs-regexp, .md .hljs-addition, .md .hljs-attribute{
-  color: var(--hl-string, #a5e075);
-}.md .hljs-number, .md .hljs-symbol, .md .hljs-bullet, .md .hljs-variable, .md .hljs-template-variable{
-  color: var(--hl-number, #f6c177);
-}.md .hljs-title, .md .hljs-section, .md .hljs-title.function_, .md .hljs-title.class_{
-  color: var(--hl-function, #82aaff);
-}.md .hljs-attr, .md .hljs-property, .md .hljs-selector-attr, .md .hljs-selector-class, .md .hljs-selector-id{
-  color: var(--hl-attr, #ffcb6b);
-}.md .hljs-built_in, .md .hljs-type, .md .hljs-class{
-  color: var(--hl-builtin, #89ddff);
-}.md .hljs-meta, .md .hljs-tag, .md .hljs-name, .md .hljs-deletion{
-  color: var(--hl-meta, #7f8ea3);
-}.md .hljs-emphasis{
+}
+
+.assistant-root .md .hljs-keyword,
+.assistant-root .md .hljs-selector-tag,
+.assistant-root .md .hljs-literal,
+.assistant-root .md .hljs-doctag,
+.assistant-root .md .hljs-formula {
+  color: var(--hl-keyword);
+}
+
+.assistant-root .md .hljs-string,
+.assistant-root .md .hljs-regexp,
+.assistant-root .md .hljs-addition,
+.assistant-root .md .hljs-attribute {
+  color: var(--hl-string);
+}
+
+.assistant-root .md .hljs-number,
+.assistant-root .md .hljs-symbol,
+.assistant-root .md .hljs-bullet,
+.assistant-root .md .hljs-variable,
+.assistant-root .md .hljs-template-variable {
+  color: var(--hl-number);
+}
+
+.assistant-root .md .hljs-title,
+.assistant-root .md .hljs-section,
+.assistant-root .md .hljs-title.function_,
+.assistant-root .md .hljs-title.class_ {
+  color: var(--hl-function);
+}
+
+.assistant-root .md .hljs-attr,
+.assistant-root .md .hljs-property,
+.assistant-root .md .hljs-selector-attr,
+.assistant-root .md .hljs-selector-class,
+.assistant-root .md .hljs-selector-id {
+  color: var(--hl-attr);
+}
+
+.assistant-root .md .hljs-built_in,
+.assistant-root .md .hljs-type,
+.assistant-root .md .hljs-class {
+  color: var(--hl-builtin);
+}
+
+.assistant-root .md .hljs-meta,
+.assistant-root .md .hljs-tag,
+.assistant-root .md .hljs-name,
+.assistant-root .md .hljs-deletion {
+  color: var(--hl-meta);
+}
+
+.assistant-root .md .hljs-emphasis {
   font-style: italic;
-}.md .hljs-strong{
+}
+
+.assistant-root .md .hljs-strong {
   font-weight: 600;
-}/* ------------------------------------------------------------------ */
+}
+
+/* ------------------------------------------------------------------ */
 /* 图片 / mermaid                                                      */
 /* ------------------------------------------------------------------ */
 
-.md img{
+.assistant-root .md img {
   display: block;
   max-width: 100%;
   height: auto;
   margin: 0.6em auto;
-  border-radius: 10px;
-  background: var(--md-inline-bg, rgba(16, 24, 40, 0.06));
-}.md .mermaid-block{
-  margin: 1em 0;
-  padding: 10px 6px;
-  border: 1px solid var(--md-border, rgba(16, 24, 40, 0.12));
   border-radius: 12px;
+  background: var(--md-inline-bg);
+}
+
+.assistant-root .md .mermaid-block {
+  margin: 1em 0;
+  padding: 12px 8px;
+  border: 1px solid var(--md-border);
+  border-radius: 14px;
+  background: var(--surface);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   text-align: center;
-}.md .mermaid-block svg{
+}
+
+.assistant-root .md .mermaid-block svg {
   display: inline-block;
   max-width: 100%;
   height: auto;
-}.md .mermaid-error{
+}
+
+.assistant-root .md .mermaid-error {
   padding: 8px 10px 10px;
-  color: var(--md-muted, #667085);
+  color: var(--md-muted);
   font-size: 13px;
   line-height: 1.5;
   text-align: left;
-}/* 失败时回显源码：仍是深色底，保证浅色主题下也读得清 */
-.md .mermaid-block .code-pre{
+}
+
+.assistant-root .md .mermaid-block .code-pre {
   margin-top: 4px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: var(--code-bg, #12161f);
-  color: var(--code-fg, #e6e9ef);
+  background: var(--code-bg);
+  color: var(--code-fg);
   text-align: left;
-}/* ------------------------------------------------------------------ */
+}
+
+/* ------------------------------------------------------------------ */
 /* 引用角标                                                            */
 /* ------------------------------------------------------------------ */
 
-.md .cite{
+.assistant-root .md .cite {
   display: inline;
-  margin: 0 0.1em;
+  margin: 0 0.12em;
   font-size: 0.72em;
   line-height: 0;
   vertical-align: baseline;
-}.md .cite a{
+}
+
+.assistant-root .md .cite a {
   display: inline-block;
-  min-width: 18px; /* 手机上可点面积下限 */
-  padding: 1px 3px;
+  min-width: 18px;
+  padding: 1px 4px;
   border-radius: 6px;
-  background: var(--md-cite-bg, rgba(59, 130, 246, 0.12));
-  color: var(--md-accent, #3b82f6);
+  background: var(--md-cite-bg);
+  color: var(--md-accent);
   font-size: 11px;
   font-weight: 600;
   line-height: 16px;
   text-align: center;
   text-decoration: none;
   vertical-align: super;
-}.md .cite a:active{
-  background: var(--md-accent, #3b82f6);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.assistant-root .md .cite a:hover,
+.assistant-root .md .cite a:active {
+  background: var(--md-accent);
   color: #ffffff;
-}/* 引用还没到位时的隐藏占位，不占布局 */
-.md .cite-pending{
+}
+
+.assistant-root .md .cite-pending {
   display: none;
 }

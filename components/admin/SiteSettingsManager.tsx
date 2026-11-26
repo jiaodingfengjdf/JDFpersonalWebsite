@@ -131,9 +131,9 @@ function validate(settings: SiteSettings): string | null {
     return "分享图片地址需要以 / 开头，或使用 http(s)://";
   }
 
-  if (!content.chatterTitle.trim()) return "留言板标题不能为空";
+  if (!content.chatterTitle.trim()) return "说说页标题不能为空";
   if (content.chatterDescription.length > SITE_SETTINGS_LIMITS.chatterDescription) {
-    return "留言板描述最多 " + SITE_SETTINGS_LIMITS.chatterDescription + " 个字符";
+    return "说说页描述最多 " + SITE_SETTINGS_LIMITS.chatterDescription + " 个字符";
   }
   for (const [index, badge] of content.footerBadges.entries()) {
     if (!badge.name.trim()) return "第 " + (index + 1) + " 个徽标缺少名称";
@@ -798,7 +798,7 @@ function SiteSettingsEditor({
 
       {tab === "content" ? (
         <div className="space-y-5">
-          <Section title="留言板" description="说说 / 留言页的标题与描述。">
+          <Section title="说说页" description="说说页的标题与描述。">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 id="chatter-title"

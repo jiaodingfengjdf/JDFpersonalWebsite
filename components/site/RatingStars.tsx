@@ -2,10 +2,10 @@ import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type RatingStarsProps = {
-  value: number;
+  value: number | null | undefined;
   max?: number;
   size?: "sm" | "md";
-  /** 自定义可访问名称；默认 `${value}/${max} 星`。 */
+  /** 自定义可访问名称；默认 `${filled} / ${max} 星`。 */
   label?: string;
   className?: string;
 };
@@ -17,20 +17,32 @@ export default function RatingStars({
   label,
   className,
 }: RatingStarsProps) {
-  const filled = Math.max(0, Math.min(max, Math.round(value)));
+  const safeMax = Math.max(1, Math.round(max));
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const filled = Math.max(0, Math.min(safeMax, Math.round(numeric)));
+  const sizeClass = size === "sm" ? "h-3 w-3" : "h-4 w-4";
+
   return (
     <span
       role="img"
-      aria-label={label ?? `${value}/${max} 星`}
-      className={cn("inline-flex items-center gap-0.5 text-amber-500", className)}
+      aria-label={label ?? `${filled} / ${safeMax} 星`}
+      className={cn("inline-flex items-center gap-0.5 align-middle", className)}
     >
-      {Array.from({ length: filled }, (_, index) => (
-        <Star
-          key={index}
-          aria-hidden="true"
-          className={size === "sm" ? "h-3 w-3 fill-current" : "h-4 w-4 fill-current"}
-        />
-      ))}
+      {Array.from({ length: safeMax }, (_, index) => {
+        const isFilled = index < filled;
+        return (
+          <Star
+            key={index}
+            aria-hidden="true"
+            className={cn(
+              sizeClass,
+              isFilled
+                ? "fill-current text-amber-500 dark:text-amber-400"
+                : "text-slate-300/70 dark:text-slate-600/70",
+            )}
+          />
+        );
+      })}
     </span>
   );
 }

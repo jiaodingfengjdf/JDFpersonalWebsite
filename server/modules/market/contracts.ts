@@ -120,6 +120,17 @@ export interface MarketQuoteItem {
   market_value: number | null;
   profit: number | null;
   profit_pct: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  prev_close?: number | null;
+  volume?: number | null;
+  amount?: number | null;
+  amplitude?: number | null;
+  turnover_rate?: number | null;
+  pe?: number | null;
+  pb?: number | null;
+  market_cap?: number | null;
 }
 
 /** 按币种分开的持仓汇总，避免把美元和人民币加在一起。 */
@@ -150,6 +161,21 @@ export interface MarketIndexItem {
   change: number;
   change_pct: number;
   stale: boolean;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  amount?: number | null;
+  amplitude?: number | null;
+}
+
+export interface MarketSearchResult {
+  market: MarketScope;
+  kind: "stock" | "index" | "fund";
+  code: string;
+  name: string;
+  secid: string;
+  badge: string;
+  watch_id: number | null;
 }
 
 export interface MarketCandle {

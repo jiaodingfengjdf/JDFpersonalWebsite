@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import SearchBar from "@/components/ui/SearchBar";
 import ProfileCard from "@/components/home/ProfileCard";
+import HomePulse from "@/components/home/HomePulse";
 import FadeIn from "@/components/ui/FadeIn";
 import LazyMount from "@/components/ui/LazyMount";
 
@@ -24,11 +25,9 @@ export default function HomeClient({
 }) {
   return (
     <div className="w-full max-w-6xl mx-auto py-6 md:py-12 px-4 sm:px-10 relative z-10">
-      {/* 搜索栏 */}
+      {/* 搜索栏（移动端与桌面端均展示） */}
       <FadeIn>
-        <div className="hidden md:block">
-          <SearchBar />
-        </div>
+        <SearchBar />
       </FadeIn>
 
       <main className="flex flex-col gap-4 md:gap-6 w-full">
@@ -57,7 +56,12 @@ export default function HomeClient({
           </div>
         </FadeIn>
 
-        {/* 第二行：照片墙 + 文章 + 说说 + 舔狗日记 */}
+        {/* 今日脉搏 · 快速入口 */}
+        <FadeIn delay={0.18}>
+          <HomePulse />
+        </FadeIn>
+
+        {/* 第二行：照片墙 + 文章 + 说说 */}
         <FadeIn delay={0.2}>
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 w-full items-stretch">
             <div className="md:col-span-4 h-full">

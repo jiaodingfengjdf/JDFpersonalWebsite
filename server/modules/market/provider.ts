@@ -10,6 +10,17 @@ export interface Quote {
   changePct: number;
   /** 行情时间（ISO 或原始日期串） */
   time: string;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  prevClose?: number | null;
+  volume?: number | null;
+  amount?: number | null;
+  turnoverRate?: number | null;
+  pe?: number | null;
+  pb?: number | null;
+  amplitude?: number | null;
+  marketCap?: number | null;
 }
 
 /** 纯代码 → 腾讯行情符号 */
@@ -17,7 +28,7 @@ export function symbolOf(kind: MarketKind, code: string): string {
   const clean = code.trim().replace(/^(sh|sz|jj)/i, "");
   if (kind === "fund") return `jj${clean}`;
   if (kind === "index") return `${clean.startsWith("39") ? "sz" : "sh"}${clean}`;
-  return `${clean.startsWith("6") || clean.startsWith("9") ? "sh" : "sz"}${clean}`;
+  return `${clean.startsWith("5") || clean.startsWith("6") || clean.startsWith("9") ? "sh" : "sz"}${clean}`;
 }
 
 function formatStockTime(raw: string): string {
@@ -31,10 +42,31 @@ const ENDPOINT = "https://qt.gtimg.cn/q=";
 const TTL_MS = 60_000;
 const cache = new Map<string, { at: number; quote: Quote }>();
 
+const pos = (raw: string | undefined): number | null => {
+  if (!raw) return null;
+  const num = Number(raw);
+  return Number.isFinite(num) && num > 0 ? num : null;
+};
+
+const finiteNum = (raw: string | undefined): number | null => {
+  if (raw === undefined || raw === "") return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+};
+
 function parseStock(symbol: string, body: string): Quote | null {
   const fields = body.split("~");
   const price = Number(fields[3]);
   if (!Number.isFinite(price) || price <= 0) return null;
+  const rawSlashAmount = Number(fields[35]?.split("/")[2]);
+  const amountFrom37 = pos(fields[37]);
+  const amount =
+    Number.isFinite(rawSlashAmount) && rawSlashAmount > 0
+      ? rawSlashAmount
+      : amountFrom37 !== null
+        ? amountFrom37 * 10_000
+        : null;
+  const capYi = pos(fields[45]);
   return {
     symbol,
     name: fields[1]?.trim() || symbol,
@@ -42,6 +74,17 @@ function parseStock(symbol: string, body: string): Quote | null {
     change: Number(fields[31]) || 0,
     changePct: Number(fields[32]) || 0,
     time: formatStockTime(fields[30] || ""),
+    prevClose: pos(fields[4]),
+    open: pos(fields[5]),
+    high: pos(fields[33]),
+    low: pos(fields[34]),
+    volume: finiteNum(fields[36]),
+    amount,
+    turnoverRate: pos(fields[38]),
+    pe: finiteNum(fields[39]),
+    amplitude: pos(fields[43]),
+    marketCap: capYi !== null ? capYi * 100_000_000 : null,
+    pb: pos(fields[46]),
   };
 }
 

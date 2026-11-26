@@ -309,3 +309,102 @@ export function PencilIcon(p: IconProps) {
     </svg>
   );
 }
+
+export function LockIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <rect x="5" y="11" width="14" height="9" rx="2.2" />
+      <path d="M8 11V7.8a4 4 0 0 1 8 0V11" />
+    </svg>
+  );
+}
+
+export function QuoteIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M9.5 8.5H6a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2.5a1 1 0 0 1 1 1v.5a2 2 0 0 1-2 2H6" />
+      <path d="M19.5 8.5H16a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2.5a1 1 0 0 1 1 1v.5a2 2 0 0 1-2 2H16" />
+    </svg>
+  );
+}
+
+export function CodeIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14" />
+    </svg>
+  );
+}
+
+export function LightbulbIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M9 18h6M10 21h4" />
+      <path d="M12 3a6 6 0 0 0-3.8 10.6c.7.6 1.3 1.4 1.5 2.4h4.6c.2-1 .8-1.8 1.5-2.4A6 6 0 0 0 12 3Z" />
+    </svg>
+  );
+}
+
+export function WandIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="m15 4-1 2.5L11.5 7.5 14 8.5 15 11l1-2.5 2.5-1L16 6.5 15 4Z" />
+      <path d="M4.5 19.5 13 11" />
+      <path d="m8 5 .6 1.4L10 7l-1.4.6L8 9l-.6-1.4L6 7l1.4-.6L8 5Z" />
+    </svg>
+  );
+}
+
+export function UserIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5 19.5c1.3-3.2 4-5 7-5s5.7 1.8 7 5" />
+    </svg>
+  );
+}
+
+export function LogInIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <path d="m10 17 5-5-5-5M15 12H3" />
+    </svg>
+  );
+}
+
+export function AlertCircleIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4.5M12 16h.01" />
+    </svg>
+  );
+}
+
+export function InfoIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
+  );
+}
+
+export function SlashIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <rect x="4" y="4" width="16" height="16" rx="3.5" />
+      <path d="m14 8-4 8" />
+    </svg>
+  );
+}
+
+export function CalendarIcon(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M8 3v4M16 3v4M3.5 10h17" />
+    </svg>
+  );
+}

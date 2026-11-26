@@ -143,38 +143,12 @@ export const NOTIFICATION_EVENTS: EventSpec[] = [
     thresholds: [],
   },
   {
-    key: "content.pending",
-    label: "友链申请待审核",
-    description: "有新的友链申请等待站长审核（评论与留言入库即通过，不在此列）。",
-    level: "info",
-    cooldownSeconds: 21_600,
-    thresholds: [
-      {
-        key: "minCount",
-        label: "触发条数",
-        min: 1,
-        max: 10_000,
-        step: 1,
-        default: 1,
-        help: "待审核总数达到该值才通知。",
-      },
-    ],
-  },
-  {
     key: "market.alert",
     label: "行情涨跌提醒",
     description:
       "自选标的命中后台设置的涨跌幅/价格规则时推送。规则在「行情」页维护，单条规则 30 分钟内不会重复提醒。",
     level: "warning",
     cooldownSeconds: 600,
-    thresholds: [],
-  },
-  {
-    key: "message.created",
-    label: "收到新留言",
-    description: "有新留言或回复提交时立即发送通知。",
-    level: "info",
-    cooldownSeconds: 0,
     thresholds: [],
   },
 ];

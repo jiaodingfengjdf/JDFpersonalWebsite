@@ -1,4 +1,9 @@
-/* 站点内嵌时的布局兜底：确保助理铺满容器、底部输入框不被裁掉 */
+/* ==========================================================================
+   站点内嵌布局与交互微调（严格限定在 .assistant-root 之下）
+   - 保持助理完整铺满顶栏以下视口，底部输入框不被裁切
+   - 与全站玻璃态与晴空蓝设计语言无缝衔接
+   ========================================================================== */
+
 .assistant-root {
   height: auto !important;
 }
@@ -7,14 +12,151 @@
   height: 100% !important;
   min-height: 0 !important;
   overflow: hidden;
+  position: relative;
 }
 
 .assistant-root .chat-screen,
 .assistant-root .settings-screen {
   height: 100% !important;
   min-height: 0 !important;
+  position: relative;
 }
 
 .assistant-root .messages {
   min-height: 0;
+}
+
+/* 桌面端：给顶栏、消息流与输入区留出柔和玻璃景深与焦点可达性 */
+@media (min-width: 1024px) {
+  .assistant-root .app {
+    max-width: 1180px;
+    margin: 12px auto 14px;
+    height: calc(100% - 26px) !important;
+    border-radius: 24px;
+    border: 1px solid var(--border-glass);
+    background: var(--glass-shell);
+    backdrop-filter: blur(22px) saturate(165%);
+    -webkit-backdrop-filter: blur(22px) saturate(165%);
+    box-shadow: var(--shadow-float);
+  }
+}
+
+/* 中等宽度：轻量圆角玻璃卡片 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .assistant-root .app {
+    max-width: calc(100% - 20px);
+    margin: 10px auto 12px;
+    height: calc(100% - 22px) !important;
+    border-radius: 20px;
+    border: 1px solid var(--border-glass);
+    background: var(--glass-shell);
+    backdrop-filter: blur(20px) saturate(155%);
+    -webkit-backdrop-filter: blur(20px) saturate(155%);
+    box-shadow: var(--shadow);
+  }
+}
+
+/* 移动端：铺满内容区，保持高通透度 */
+@media (max-width: 767px) {
+  .assistant-root .app {
+    background: var(--glass-shell);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+  }
+}
+
+/* 键盘焦点可见性统一 */
+.assistant-root button:focus-visible,
+.assistant-root a:focus-visible,
+.assistant-root input:focus-visible,
+.assistant-root textarea:focus-visible,
+.assistant-root select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.assistant-root .input-wrap textarea:focus-visible {
+  outline: none;
+}
+
+/* 仅真实悬停设备触发卡片悬浮，避免移动端点击残留 hover 态 */
+@media (hover: hover) and (pointer: fine) {
+  .assistant-root .suggestion:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 44%, var(--border-glass));
+    background: var(--surface-hover);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .assistant-root .suggestion:hover .suggestion-ico {
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow: 0 6px 14px -4px var(--accent-glow);
+  }
+
+  .assistant-root .icon-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .assistant-root .title-btn:hover {
+    background: var(--surface);
+  }
+
+  .assistant-root .msg-actions button:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .assistant-root .tool-toggle:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .assistant-root .tool-toggle.on:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+  }
+
+  .assistant-root .send-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+    box-shadow: 0 12px 26px -6px var(--accent-glow);
+  }
+
+  .assistant-root .scroll-bottom:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+    color: var(--accent);
+  }
+
+  .assistant-root .conv-item:not(.active):hover {
+    background: var(--surface);
+  }
+
+  .assistant-root .drawer-foot button:hover,
+  .assistant-root .drawer-foot a:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .assistant-root .rail-item:not(.is-on):hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .assistant-root .team-card:hover,
+  .assistant-root .skill-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  }
+
+  .assistant-root .result:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+  }
+
+  .assistant-root .page-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+    background: var(--surface-hover);
+  }
 }

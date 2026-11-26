@@ -98,33 +98,55 @@ export default function WeekStrip({
     else onSelect(startOfDay(day));
   };
 
+  const todayStart = startOfDay(today);
+  const showingToday =
+    view === 'week'
+      ? weekStart === mondayOf(today)
+      : monthAnchor === firstOfMonth(today);
+  const showTodayBtn = mode === 'select' && (!showingToday || !sameDay(selectedDay, today));
+
+  const jumpToday = () => {
+    setWeekStart(mondayOf(today));
+    setMonthAnchor(firstOfMonth(today));
+    onSelect(todayStart);
+  };
+
   return (
     <div className={`week-strip${mode === 'move' ? ' is-moving' : ''}`}>
       <div className="week-head">
-        <button type="button" className="week-nav" aria-label="上一页" onClick={() => shift(-1)}>
-          <ChevronLeftIcon size={16} />
-        </button>
-        <span className="week-range">{mode === 'move' ? '选择目标日期' : rangeLabel}</span>
-        <button type="button" className="week-nav" aria-label="下一页" onClick={() => shift(1)}>
-          <ChevronRightIcon size={16} />
-        </button>
-        <div className="week-view-toggle" role="group" aria-label="日历视图">
-          <button
-            type="button"
-            className={`week-view-btn${view === 'week' ? ' is-on' : ''}`}
-            aria-pressed={view === 'week'}
-            onClick={() => setView('week')}
-          >
-            周
+        <div className="week-head-nav">
+          <button type="button" className="week-nav" aria-label="上一页" onClick={() => shift(-1)}>
+            <ChevronLeftIcon size={16} />
           </button>
-          <button
-            type="button"
-            className={`week-view-btn${view === 'month' ? ' is-on' : ''}`}
-            aria-pressed={view === 'month'}
-            onClick={() => setView('month')}
-          >
-            月
+          <span className="week-range">{mode === 'move' ? '选择目标日期' : rangeLabel}</span>
+          <button type="button" className="week-nav" aria-label="下一页" onClick={() => shift(1)}>
+            <ChevronRightIcon size={16} />
           </button>
+        </div>
+        <div className="week-head-actions">
+          {showTodayBtn ? (
+            <button type="button" className="week-today-btn" onClick={jumpToday}>
+              回到今天
+            </button>
+          ) : null}
+          <div className="week-view-toggle" role="group" aria-label="日历视图">
+            <button
+              type="button"
+              className={`week-view-btn${view === 'week' ? ' is-on' : ''}`}
+              aria-pressed={view === 'week'}
+              onClick={() => setView('week')}
+            >
+              周
+            </button>
+            <button
+              type="button"
+              className={`week-view-btn${view === 'month' ? ' is-on' : ''}`}
+              aria-pressed={view === 'month'}
+              onClick={() => setView('month')}
+            >
+              月
+            </button>
+          </div>
         </div>
       </div>
 
@@ -140,15 +162,21 @@ export default function WeekStrip({
                 type="button"
                 data-day={startOfDay(day)}
                 className={`week-day${active ? ' is-active' : ''}${isToday ? ' is-today' : ''}${
-                  mode === 'move' ? ' is-target' : ''
-                }`}
+                  count > 0 ? ' has-tasks' : ''
+                }${mode === 'move' ? ' is-target' : ''}`}
                 aria-label={`${new Date(day).getMonth() + 1}月${new Date(day).getDate()}日，${count} 个任务`}
                 aria-pressed={active}
                 onClick={() => pick(day)}
               >
                 <span className="week-wd">{WEEK_LABELS[i]}</span>
                 <span className="week-num">{new Date(day).getDate()}</span>
-                <span className={`week-dot${count > 0 ? ' has' : ''}`} aria-hidden />
+                {count > 1 ? (
+                  <span className="week-count" aria-hidden>
+                    {count > 9 ? '9+' : count}
+                  </span>
+                ) : (
+                  <span className={`week-dot${count > 0 ? ' has' : ''}`} aria-hidden />
+                )}
               </button>
             );
           })}
@@ -172,7 +200,7 @@ export default function WeekStrip({
                 data-day={startOfDay(day)}
                 className={`month-day${active ? ' is-active' : ''}${isToday ? ' is-today' : ''}${
                   outside ? ' is-outside' : ''
-                }${mode === 'move' ? ' is-target' : ''}`}
+                }${count > 0 ? ' has-tasks' : ''}${mode === 'move' ? ' is-target' : ''}`}
                 aria-label={`${new Date(day).getMonth() + 1}月${new Date(day).getDate()}日，${count} 个任务`}
                 aria-pressed={active}
                 onClick={() => pick(day)}

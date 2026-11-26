@@ -36,8 +36,8 @@ export default async function AdminDashboardPage() {
       ring: "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300",
     },
     {
-      label: "已通过留言",
-      value: counts.approvedMessages,
+      label: "已发布说说",
+      value: counts.publishedChatters,
       icon: MessageSquare,
       tone: "text-violet-500 dark:text-violet-300",
       ring: "bg-violet-500/10 text-violet-600 dark:bg-violet-400/10 dark:text-violet-300",

@@ -492,6 +492,8 @@ export default function Toolbox() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeApp, setActiveApp] = useState<string | null>(null);
   const [appOrder, setAppOrder] = useState<string[]>([]);
+  const [filterQuery, setFilterQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const btnRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
@@ -576,9 +578,26 @@ export default function Toolbox() {
   }, [isOpen]);
 
   useEffect(() => {
-    const handleClose = () => { setIsOpen(false); setActiveApp(null); };
+    const handleClose = () => {
+      setIsOpen(false);
+      setActiveApp(null);
+      setFilterQuery("");
+    };
+    const handleOpen = () => {
+      setPanelOffset({ x: 0, y: 0 });
+      setResizeOffset({ x: 0, y: 0 });
+      setPanelW(288);
+      setPanelH(560);
+      setActiveApp(null);
+      setFilterQuery("");
+      setIsOpen(true);
+    };
     window.addEventListener("close-toolbox", handleClose);
-    return () => window.removeEventListener("close-toolbox", handleClose);
+    window.addEventListener("open-toolbox", handleOpen);
+    return () => {
+      window.removeEventListener("close-toolbox", handleClose);
+      window.removeEventListener("open-toolbox", handleOpen);
+    };
   }, []);
 
   const sensors = useSensors(
@@ -677,20 +696,106 @@ export default function Toolbox() {
                 </div>
               </div>
             ) : (
-              <div className="px-6 pt-5 pb-10 flex-1 overflow-y-auto overflow-x-hidden">
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={orderedApps.map((a) => a.id)} strategy={rectSortingStrategy}>
-                    <div className="grid grid-cols-2 gap-5 md:gap-4">
-                      {orderedApps.map((app) => (
-                        <SortableAppIcon
-                          key={app.id}
-                          app={app}
-                          onClick={() => setActiveApp(app.id)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="px-4 pt-2 pb-2 shrink-0">
+                  <div className="relative flex items-center">
+                    <svg
+                      className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-3 pointer-events-none"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path strokeLinecap="round" d="M21 21l-4.35-4.35" />
+                    </svg>
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={filterQuery}
+                      onChange={(e) => setFilterQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape" && filterQuery) {
+                          e.stopPropagation();
+                          setFilterQuery("");
+                        } else if (e.key === "Enter" && filterQuery.trim()) {
+                          const q = filterQuery.trim().toLowerCase();
+                          const first = orderedApps.find(
+                            (a) =>
+                              a.name.toLowerCase().includes(q) ||
+                              a.id.toLowerCase().includes(q),
+                          );
+                          if (first) setActiveApp(first.id);
+                        }
+                      }}
+                      placeholder="搜索 24 款小工具…"
+                      aria-label="搜索小工具"
+                      className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/70 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                    />
+                    {filterQuery.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterQuery("");
+                          searchInputRef.current?.focus();
+                        }}
+                        aria-label="清空小工具筛选"
+                        title="清空"
+                        className="absolute right-2 p-0.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="px-6 pt-2 pb-10 flex-1 overflow-y-auto overflow-x-hidden">
+                  {(() => {
+                    const q = filterQuery.trim().toLowerCase();
+                    const filteredApps = q
+                      ? orderedApps.filter(
+                          (app) =>
+                            app.name.toLowerCase().includes(q) ||
+                            app.id.toLowerCase().includes(q),
+                        )
+                      : orderedApps;
+
+                    if (filteredApps.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            未找到匹配「{filterQuery.trim()}」的小工具
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFilterQuery("")}
+                            className="text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded px-2 py-0.5"
+                          >
+                            清空筛选
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={filteredApps.map((a) => a.id)} strategy={rectSortingStrategy}>
+                          <div className="grid grid-cols-2 gap-5 md:gap-4">
+                            {filteredApps.map((app) => (
+                              <SortableAppIcon
+                                key={app.id}
+                                app={app}
+                                onClick={() => setActiveApp(app.id)}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 

@@ -89,13 +89,13 @@ describe("notifications service", () => {
       minRequests: 20,
     });
 
-    const messageCreated = state.rules.find(
-      (rule) => rule.event_key === "message.created",
+    const marketAlert = state.rules.find(
+      (rule) => rule.event_key === "market.alert",
     );
-    expect(messageCreated).toMatchObject({
+    expect(marketAlert).toMatchObject({
       enabled: true,
       channels: [],
-      cooldown_seconds: 0,
+      cooldown_seconds: 600,
       thresholds: [],
     });
   });

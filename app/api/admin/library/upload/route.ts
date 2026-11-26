@@ -5,7 +5,7 @@ import { errors } from "@/server/http/errors";
 import { handle } from "@/server/http/handler";
 import { assertSameOrigin } from "@/server/http/origin";
 import { assertWritable } from "@/server/http/write-guard";
-import { getLibraryService, isSafeCoverUrl } from "@/server/modules/library";
+import { bookStatus, getLibraryService, isSafeCoverUrl } from "@/server/modules/library";
 import { getUploadRoot } from "@/server/storage";
 import {
   inspectCover,
@@ -102,18 +102,34 @@ export async function POST(request: Request) {
       const fileUrl = `/uploads/books/${filename}`;
 
       const titleFromName = file.name.replace(/\.[^.]+$/, "").trim() || "未命名";
+      const titleInput = form.get("title");
+      const title =
+        typeof titleInput === "string" && titleInput.trim()
+          ? titleInput.trim().slice(0, 200)
+          : titleFromName.slice(0, 200);
       const authorInput = form.get("author");
       const author = typeof authorInput === "string" ? authorInput.trim().slice(0, 100) : "";
+      const categoryInput = form.get("category");
+      const category = typeof categoryInput === "string" ? categoryInput.trim().slice(0, 40) : "";
+      const statusInput = form.get("status");
+      const parsedStatus = bookStatus.safeParse(typeof statusInput === "string" ? statusInput : undefined);
+      const status = parsedStatus.success ? parsedStatus.data : "reading";
+      const noteInput = form.get("note");
+      const note = typeof noteInput === "string" ? noteInput.trim().slice(0, 2000) : "";
+
       try {
         await writeBookUpload(root, filename, buffer);
         const created = await getLibraryService().create({
-          title: titleFromName.slice(0, 200),
+          title,
           author,
+          category,
           format,
           fileUrl,
           bytes: buffer.length,
           totalUnits,
           cover,
+          status,
+          note,
         });
         return { ...created, format, bytes: buffer.length, totalUnits };
       } catch (error) {
