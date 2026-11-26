@@ -265,9 +265,9 @@ function mergeAdminSettings(
     imageModel: serverView.imageModel,
     imageQuality: serverView.imageQuality,
     imageAspect: serverView.imageAspect,
-    // 本机浏览器保存的密钥仅在站长态恢复，供站长直连调用
-    apiKey: localSaved?.apiKey ?? '',
-    imageApiKey: localSaved?.imageApiKey ?? '',
+    // 密钥由服务端加密持久化并通过 /api/assistant/proxy 代理调用，输入框默认留空（仅在更换密钥时输入）
+    apiKey: '',
+    imageApiKey: '',
   };
 }
 
@@ -509,7 +509,8 @@ export async function refreshAuthSession(): Promise<AssistantAuthSnapshot> {
 
 function saveSettingsSoon(): void {
   if (!state.isAdmin) return;
-  void kvSet(SETTINGS_KEY, state.settings);
+  const { apiKey: _ignoreApiKey, imageApiKey: _ignoreImageKey, ...safe } = state.settings;
+  void kvSet(SETTINGS_KEY, safe);
 }
 
 /* ------------------------------------------------------------------ */
@@ -804,23 +805,24 @@ export async function saveAdminSettings(options: {
       imageModel: saved.imageModel,
       imageQuality: saved.imageQuality,
       imageAspect: saved.imageAspect,
-      apiKey: options.clearApiKey ? '' : state.settings.apiKey,
-      imageApiKey: options.clearImageApiKey ? '' : state.settings.imageApiKey,
+      // 保存成功后清空输入框中的明文密钥，后续统一走服务端加密密钥代理
+      apiKey: '',
+      imageApiKey: '',
     };
     const nextPublicConfig = publicConfigFromAdmin(saved);
     setState({
       settings: nextSettings,
       publicConfig: nextPublicConfig,
-      apiKeyConfigured: saved.apiKeyConfigured || Boolean(nextSettings.apiKey.trim()),
+      apiKeyConfigured: saved.apiKeyConfigured,
       apiKeyMask: saved.apiKeyMask,
-      imageApiKeyConfigured:
-        saved.imageApiKeyConfigured || Boolean(nextSettings.imageApiKey.trim()),
+      imageApiKeyConfigured: saved.imageApiKeyConfigured,
       imageApiKeyMask: saved.imageApiKeyMask,
       settingsSaveStatus: 'saved',
       settingsSaveError: null,
       settingsLastSavedAt: saved.updatedAt,
     });
-    void kvSet(SETTINGS_KEY, nextSettings);
+    const { apiKey: _a, imageApiKey: _b, ...safeSettings } = nextSettings;
+    void kvSet(SETTINGS_KEY, safeSettings);
     toast(
       options.clearApiKey
         ? '已清除 DeepSeek API Key'
@@ -905,9 +907,13 @@ function ensureReady(): boolean {
     toast('正在生成回答，请先停止', 'info');
     return false;
   }
-  if (!state.settings.apiKey.trim() && !state.settings.mockMode) {
+  const hasKey =
+    Boolean(state.settings.apiKey.trim()) ||
+    state.apiKeyConfigured ||
+    state.publicConfig.configured;
+  if (!hasKey && !state.settings.mockMode) {
     if (state.isAdmin) {
-      toast('请先在设置里填写 DeepSeek API Key（或开启演示模式）', 'error');
+      toast('请先在设置里填写并保存 DeepSeek API Key（或开启演示模式）', 'error');
       openSettings();
     } else {
       toast('AI 助理服务暂未由站长开放或尚未完成配置', 'info');

@@ -198,6 +198,7 @@ export function kindOfFile(file: File): FileKind {
 export interface UploadFileArgs {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   file: File;
   purpose?: FilePurpose;
   signal?: AbortSignal;
@@ -210,14 +211,16 @@ export interface UploadFileArgs {
  * multipart 里必须先 `purpose` 后 `file`，否则服务端 400。
  */
 export function uploadFile(args: UploadFileArgs): Promise<UploadedFile> {
-  const apiKey = requireApiKey(args.apiKey);
+  const trimmedKey = (args.apiKey ?? '').trim();
+  const viaProxy = Boolean(args.useProxy && !trimmedKey);
+  const apiKey = viaProxy ? '' : requireApiKey(args.apiKey);
   const file = args.file;
   if (!file) {
     return Promise.reject(new ApiError('没有选择文件', { code: 'no_file' }));
   }
 
   const purpose: FilePurpose = args.purpose ?? pickPurpose(file);
-  const url = `${apiRoot(args.baseUrl)}/files`;
+  const url = viaProxy ? '/api/assistant/proxy/files' : `${apiRoot(args.baseUrl)}/files`;
 
   if (args.signal?.aborted) {
     return Promise.reject(new ApiError('上传已取消', { code: 'aborted', name: 'AbortError' }));
@@ -226,7 +229,11 @@ export function uploadFile(args: UploadFileArgs): Promise<UploadedFile> {
   return new Promise<UploadedFile>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
-    xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+    if (viaProxy) {
+      xhr.withCredentials = true;
+    } else {
+      xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+    }
     xhr.setRequestHeader('Accept', 'application/json');
     // 不设置 Content-Type：让浏览器写 multipart boundary。
 

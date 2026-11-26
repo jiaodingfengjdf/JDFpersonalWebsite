@@ -51,6 +51,7 @@ export type TtsFormat = 'wav' | 'pcm';
 export interface SynthesizeSpeechArgs {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   text: string;
   voiceId?: VoiceId;
   format?: TtsFormat;
@@ -64,6 +65,7 @@ export interface SynthesizeSpeechArgs {
 export interface TranscribeSpeechArgs {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   /** 必须是 WAV（16k 16-bit 单声道最佳），≤8MiB。 */
   audio: Blob;
   filename?: string;
@@ -230,7 +232,9 @@ function withDetail(message: string, detail?: string): string {
  * `format: 'pcm'` 时返回 24kHz / 16-bit / 单声道裸 PCM（无 WAV 头），由播放层自行包装。
  */
 export async function synthesizeSpeech(args: SynthesizeSpeechArgs): Promise<Blob> {
-  const apiKey = requireApiKey(args.apiKey);
+  const trimmedKey = (args.apiKey ?? '').trim();
+  const viaProxy = Boolean(args.useProxy && !trimmedKey);
+  const apiKey = viaProxy ? '' : requireApiKey(args.apiKey);
   const text = (args.text ?? '').trim();
   if (!text) {
     throw new ApiError('没有可朗读的文本', { code: 'empty_text' });
@@ -264,16 +268,21 @@ export async function synthesizeSpeech(args: SynthesizeSpeechArgs): Promise<Blob
 
   let response: Response;
   try {
-    response = await fetch(`${apiRoot(args.baseUrl)}/v1/tools/tts`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        Accept: 'audio/*, application/json',
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'audio/*, application/json',
+    };
+    if (!viaProxy) headers.Authorization = `Bearer ${apiKey}`;
+    response = await fetch(
+      viaProxy ? '/api/assistant/proxy/tts' : `${apiRoot(args.baseUrl)}/v1/tools/tts`,
+      {
+        method: 'POST',
+        credentials: viaProxy ? 'same-origin' : undefined,
+        headers,
+        body: JSON.stringify(payload),
+        signal: args.signal,
       },
-      body: JSON.stringify(payload),
-      signal: args.signal,
-    });
+    );
   } catch (err) {
     if (args.signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
       throw abortError();
@@ -388,7 +397,9 @@ function mapTtsError(status: number, detail?: string): ApiError {
  * multipart 字段名必须是 `file`；不要手动设置 Content-Type（交给浏览器带 boundary）。
  */
 export async function transcribeSpeech(args: TranscribeSpeechArgs): Promise<TranscriptionResult> {
-  const apiKey = requireApiKey(args.apiKey);
+  const trimmedKey = (args.apiKey ?? '').trim();
+  const viaProxy = Boolean(args.useProxy && !trimmedKey);
+  const apiKey = viaProxy ? '' : requireApiKey(args.apiKey);
 
   const audio = args.audio;
   if (!audio || typeof audio.size !== 'number' || audio.size === 0) {
@@ -409,15 +420,18 @@ export async function transcribeSpeech(args: TranscribeSpeechArgs): Promise<Tran
 
   let response: Response;
   try {
-    response = await fetch(`${apiRoot(args.baseUrl)}/v1/tools/asr`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (!viaProxy) headers.Authorization = `Bearer ${apiKey}`;
+    response = await fetch(
+      viaProxy ? '/api/assistant/proxy/asr' : `${apiRoot(args.baseUrl)}/v1/tools/asr`,
+      {
+        method: 'POST',
+        credentials: viaProxy ? 'same-origin' : undefined,
+        headers,
+        body: form,
+        signal: args.signal,
       },
-      body: form,
-      signal: args.signal,
-    });
+    );
   } catch (err) {
     if (args.signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
       throw abortError();

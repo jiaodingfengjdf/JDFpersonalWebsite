@@ -21,5 +21,7 @@ export {
 export {
   loadAssistantAdminSettings,
   loadAssistantPublicConfig,
+  loadAssistantRuntimeConfig,
   saveAssistantAdminSettings,
+  type AssistantRuntimeConfig,
 } from "./service";

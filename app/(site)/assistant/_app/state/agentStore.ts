@@ -304,19 +304,27 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
     now: () => Date.now(),
     location: () => deps.getState().settings.location,
     webSearch: (query, options) => {
-      const { settings } = deps.getState();
+      const state = deps.getState();
+      const { settings } = state;
       return searchWeb({
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
+        useProxy:
+          !settings.apiKey.trim() &&
+          (state.apiKeyConfigured || state.publicConfig.configured),
         query,
         options,
       });
     },
     generateImage: (prompt, options) => {
-      const { settings } = deps.getState();
+      const state = deps.getState();
+      const { settings } = state;
       return generateImageApi({
         apiKey: settings.imageApiKey,
         baseUrl: settings.imageBaseUrl,
+        useProxy:
+          !settings.imageApiKey.trim() &&
+          (state.imageApiKeyConfigured || state.publicConfig.imageConfigured),
         model: settings.imageModel,
         quality: options?.quality ?? settings.imageQuality,
         aspectRatio: options?.aspectRatio ?? settings.imageAspect,
@@ -325,10 +333,14 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
       });
     },
     fetchPage: (url) => {
-      const { settings } = deps.getState();
+      const state = deps.getState();
+      const { settings } = state;
       return fetchPageApi({
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
+        useProxy:
+          !settings.apiKey.trim() &&
+          (state.apiKeyConfigured || state.publicConfig.configured),
         url,
       });
     },
@@ -362,7 +374,8 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
 
   /** 每轮结束后异步抽取记忆；失败由调用方决定提示方式。 */
   const extractMemories = async (conv: Conversation): Promise<void> => {
-    const settings = deps.getState().settings;
+    const state = deps.getState();
+    const { settings } = state;
     const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user' && !m.hidden);
     const lastAssistant = [...conv.messages]
       .reverse()
@@ -373,6 +386,9 @@ export function createAgentStore(deps: AgentDeps): AgentApi {
     const { text } = await createMessage({
       apiKey: settings.apiKey,
       baseUrl: settings.baseUrl,
+      useProxy:
+        !settings.apiKey.trim() &&
+        (state.apiKeyConfigured || state.publicConfig.configured),
       body: {
         model: settings.model,
         max_tokens: 600,

@@ -94,7 +94,7 @@ export default function Composer({
 }: {
   draftRequest?: ComposerDraftRequest | null;
 }) {
-  const { settings, streaming, isAdmin, publicConfig } = useApp();
+  const { settings, streaming, isAdmin, publicConfig, apiKeyConfigured } = useApp();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState<UploadProgress | null>(null);
@@ -167,7 +167,10 @@ export default function Composer({
     return () => window.removeEventListener('keydown', onKey);
   }, [modelMenu, promptMenu, streaming]);
 
-  const hasClientKey = Boolean(settings.apiKey.trim());
+  const hasUsableKey =
+    Boolean(settings.apiKey.trim()) || apiKeyConfigured || Boolean(publicConfig?.configured);
+  const useProxy =
+    !settings.apiKey.trim() && (apiKeyConfigured || Boolean(publicConfig?.configured));
   const activeModel = isAdmin ? settings.model : publicConfig?.model || settings.model;
   const thinkingOn = isAdmin ? settings.thinking : Boolean(publicConfig?.thinking ?? settings.thinking);
   const webSearchOn = isAdmin ? settings.webSearch : Boolean(publicConfig?.webSearch ?? settings.webSearch);
@@ -204,9 +207,9 @@ export default function Composer({
         continue;
       }
 
-      if (!hasClientKey) {
+      if (!hasUsableKey) {
         toast(
-          isAdmin ? '上传文档需要先在设置里填写 API Key' : '当前仅支持粘贴或上传图片附件',
+          isAdmin ? '上传文档需要先在设置里填写并保存 API Key' : '站长暂未配置 AI 助理密钥',
           'error',
         );
         continue;
@@ -217,6 +220,7 @@ export default function Composer({
         const uploaded = await uploadFile({
           apiKey: settings.apiKey,
           baseUrl: settings.baseUrl,
+          useProxy,
           file,
           purpose,
           onProgress: (percent) => setUploading({ name: file.name, percent }),
@@ -287,6 +291,7 @@ export default function Composer({
       const result = await transcribeSpeech({
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
+        useProxy,
         audio: wav,
         filename: 'speech.wav',
       });
@@ -311,9 +316,9 @@ export default function Composer({
       return;
     }
     if (transcribing) return;
-    if (!hasClientKey) {
+    if (!hasUsableKey) {
       toast(
-        isAdmin ? '语音输入需要先在设置里填写 API Key' : '语音转写需要站长在设置中开启直连密钥',
+        isAdmin ? '语音输入需要先在设置里填写并保存 API Key' : '站长暂未配置 AI 助理密钥',
         'error',
       );
       return;

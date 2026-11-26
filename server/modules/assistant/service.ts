@@ -210,6 +210,37 @@ async function readStoredRow(db: AppDatabase): Promise<StoredAssistantSettings> 
   }
 }
 
+export interface AssistantRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  imageBaseUrl: string;
+  imageApiKey: string;
+  model: string;
+  systemPrompt: string;
+  mockMode: boolean;
+}
+
+/**
+ * 仅限服务端代理路由调用：从数据库解密读取站长已保存的 API Key 与端点，
+ * 绝不向浏览器暴露明文密钥。
+ */
+export async function loadAssistantRuntimeConfig(
+  db: AppDatabase = getDb(),
+): Promise<AssistantRuntimeConfig> {
+  const stored = await readStoredRow(db);
+  return {
+    baseUrl: stored.baseUrl,
+    apiKey: stored.sealedApiKey ? openAssistantSecret(stored.sealedApiKey).trim() : "",
+    imageBaseUrl: stored.imageBaseUrl,
+    imageApiKey: stored.sealedImageApiKey
+      ? openAssistantSecret(stored.sealedImageApiKey).trim()
+      : "",
+    model: stored.model,
+    systemPrompt: stored.systemPrompt,
+    mockMode: stored.mockMode,
+  };
+}
+
 export async function loadAssistantAdminSettings(
   db: AppDatabase = getDb(),
 ): Promise<AssistantAdminSettingsView> {

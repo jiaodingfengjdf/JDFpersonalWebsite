@@ -280,7 +280,21 @@ export default function SettingsScreen() {
             <div className="settings-banner-item">
               <span>
                 DeepSeek 密钥：
-                {apiKeyMask || (settings.apiKey.trim() ? '本机已填写（待保存）' : '未配置')}
+                {settings.apiKey.trim()
+                  ? '已输入新密钥（点右上角保存）'
+                  : apiKeyConfigured
+                    ? `云端已生效（${apiKeyMask || '已加密'}）`
+                    : '未配置'}
+              </span>
+            </div>
+            <div className="settings-banner-item">
+              <span>
+                生图密钥：
+                {settings.imageApiKey.trim()
+                  ? '已输入新密钥（点右上角保存）'
+                  : imageApiKeyConfigured
+                    ? `云端已生效（${imageApiKeyMask || '已加密'}）`
+                    : '未配置'}
               </span>
             </div>
           </div>

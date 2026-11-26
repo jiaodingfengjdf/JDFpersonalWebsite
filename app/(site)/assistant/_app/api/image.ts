@@ -47,6 +47,7 @@ export function isImageUrl(value: unknown): value is string {
 export async function generateImage(args: {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   model: string;
   prompt: string;
   aspectRatio?: string;
@@ -56,6 +57,12 @@ export async function generateImage(args: {
 }): Promise<ImageResult> {
   const prompt = args.prompt.trim();
   if (!prompt) throw new ApiError('提示词不能为空', { code: 'invalid_prompt' });
+
+  const trimmedKey = (args.apiKey ?? '').trim();
+  const viaProxy = Boolean(args.useProxy && !trimmedKey);
+  if (!trimmedKey && !viaProxy) {
+    throw new ApiError('请先在设置中配置生图 API Key', { code: 'no_image_api_key' });
+  }
 
   const base = (args.baseUrl || 'https://grsai.dakka.com.cn').trim().replace(/\/+$/, '');
   const body: Record<string, unknown> = {
@@ -69,15 +76,18 @@ export async function generateImage(args: {
 
   let response: Response;
   try {
-    response = await fetch(`${base}/v1/api/generate`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${args.apiKey}`,
-        'Content-Type': 'application/json',
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (!viaProxy) headers.Authorization = `Bearer ${trimmedKey}`;
+    response = await fetch(
+      viaProxy ? '/api/assistant/proxy/image' : `${base}/v1/api/generate`,
+      {
+        method: 'POST',
+        credentials: viaProxy ? 'same-origin' : undefined,
+        headers,
+        body: JSON.stringify(body),
+        signal: args.signal,
       },
-      body: JSON.stringify(body),
-      signal: args.signal,
-    });
+    );
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new ApiError('请求已取消', { code: 'aborted' });
@@ -96,9 +106,15 @@ export async function generateImage(args: {
   const urls = (raw.results ?? []).map((item) => item.url ?? '').filter(isImageUrl);
 
   if (!response.ok) {
+    const payloadError = (payload as { error?: string | { message?: string } } | null)?.error;
+    const extractedError =
+      typeof payloadError === 'string'
+        ? payloadError
+        : typeof payloadError?.message === 'string'
+          ? payloadError.message
+          : '';
     const reason =
-      raw.error ||
-      (payload as { error?: string } | null)?.error ||
+      extractedError ||
       (response.status === 401
         ? 'API Key 无效'
         : response.status === 402

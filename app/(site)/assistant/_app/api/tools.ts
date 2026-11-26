@@ -65,15 +65,16 @@ async function postJson<T>(
   apiKey: string,
   body: unknown,
   signal?: AbortSignal,
+  viaProxy = false,
 ): Promise<T> {
   let response: Response;
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (!viaProxy) headers.Authorization = `Bearer ${apiKey}`;
     response = await fetch(url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      credentials: viaProxy ? 'same-origin' : undefined,
+      headers,
       body: JSON.stringify(body),
       signal,
     });
@@ -151,6 +152,7 @@ export function isFetchableUrl(raw: string): boolean {
 export async function searchWeb(args: {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   query: string;
   options?: SearchOptions;
   signal?: AbortSignal;
@@ -168,11 +170,15 @@ export async function searchWeb(args: {
   if (args.options?.oriQuestion) body.ori_question = args.options.oriQuestion.slice(0, 128);
   if (args.options?.localization) body.localization = args.options.localization;
 
+  const trimmedKey = (args.apiKey ?? '').trim();
+  const viaProxy = Boolean(args.useProxy && !trimmedKey);
+
   const raw = await postJson<{ results?: RawSearchItem[] }>(
-    joinUrl(args.baseUrl, '/v1/tools/search'),
-    args.apiKey,
+    viaProxy ? '/api/assistant/proxy/search' : joinUrl(args.baseUrl, '/v1/tools/search'),
+    trimmedKey,
     body,
     args.signal,
+    viaProxy,
   );
 
   const results = (raw.results ?? []).map((item) => ({
@@ -194,17 +200,21 @@ export async function searchWeb(args: {
 export async function fetchPage(args: {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   url: string;
   signal?: AbortSignal;
 }): Promise<FetchedPage> {
   if (!isFetchableUrl(args.url)) {
     throw new ApiError('只支持 http/https 链接（不能带用户名密码）', { code: 'invalid_url' });
   }
+  const trimmedKey = (args.apiKey ?? '').trim();
+  const viaProxy = Boolean(args.useProxy && !trimmedKey);
   const raw = await postJson<{ title?: string; content?: string }>(
-    joinUrl(args.baseUrl, '/v1/tools/fetch'),
-    args.apiKey,
+    viaProxy ? '/api/assistant/proxy/fetch' : joinUrl(args.baseUrl, '/v1/tools/fetch'),
+    trimmedKey,
     { url: args.url.trim() },
     args.signal,
+    viaProxy,
   );
   return { title: raw.title ?? '', content: raw.content ?? '' };
 }

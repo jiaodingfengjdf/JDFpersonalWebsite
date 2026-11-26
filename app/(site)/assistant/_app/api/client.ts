@@ -34,6 +34,7 @@ export interface ChatResult {
 export interface NonStreamArgs {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   body: Omit<CreateMessageRequest, 'messages' | 'stream'>;
   messages: CreateMessageRequest['messages'];
   signal?: AbortSignal;
@@ -51,19 +52,25 @@ export interface NonStreamResult {
  * 与流式共用同一套鉴权头与错误映射。
  */
 export async function createMessage(args: NonStreamArgs): Promise<NonStreamResult> {
-  const { apiKey, baseUrl, body, messages, signal } = args;
-  if (!apiKey.trim()) throw new ApiError('缺少 API Key', { code: 'no_api_key' });
+  const { apiKey, baseUrl, useProxy, body, messages, signal } = args;
+  const trimmedKey = apiKey.trim();
+  const viaProxy = Boolean(useProxy && !trimmedKey);
+  if (!trimmedKey && !viaProxy) throw new ApiError('缺少 API Key', { code: 'no_api_key' });
+
+  const url = viaProxy ? '/api/assistant/proxy/messages' : `${apiRoot(baseUrl)}/anthropic/v1/messages`;
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'anthropic-version': '2023-06-01',
+    'anthropic-beta': 'files-api-2025-04-14',
+  };
+  if (!viaProxy) headers['x-api-key'] = trimmedKey;
 
   let res: Response;
   try {
-    res = await fetch(`${apiRoot(baseUrl)}/anthropic/v1/messages`, {
+    res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey.trim(),
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'files-api-2025-04-14',
-      },
+      credentials: viaProxy ? 'same-origin' : undefined,
+      headers,
       body: JSON.stringify({ ...body, messages, stream: false }),
       signal,
     });
@@ -148,6 +155,7 @@ const TOOL_BLOCK_TYPES = new Set([
 export interface StreamMessageArgs {
   apiKey: string;
   baseUrl: string;
+  useProxy?: boolean;
   /** 完整请求体（不含 messages），例如 model / thinking / tools / safety_check / title / system。 */
   body: Omit<CreateMessageRequest, 'messages'>;
   messages: CreateMessageRequest['messages'];
@@ -218,21 +226,26 @@ async function readErrorPayload(res: Response): Promise<unknown> {
  * 抛 ApiError：网络失败、HTTP 错误、流内 error 事件、流被中途关闭。
  */
 export async function streamMessage(args: StreamMessageArgs): Promise<ChatResult> {
-  const { apiKey, baseUrl, body, messages, signal, callbacks } = args;
-  if (!apiKey.trim()) throw new ApiError('请先在「设置」里填写 DeepSeek API Key', { code: 'no_api_key' });
+  const { apiKey, baseUrl, useProxy, body, messages, signal, callbacks } = args;
+  const trimmedKey = apiKey.trim();
+  const viaProxy = Boolean(useProxy && !trimmedKey);
+  if (!trimmedKey && !viaProxy) throw new ApiError('请先在「设置」里填写 DeepSeek API Key', { code: 'no_api_key' });
 
-  const url = `${apiRoot(baseUrl)}/anthropic/v1/messages`;
+  const url = viaProxy ? '/api/assistant/proxy/messages' : `${apiRoot(baseUrl)}/anthropic/v1/messages`;
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'anthropic-version': '2023-06-01',
+    // 引用 Files API 上传的文档/图片时必须携带（文档：文件解析 / 图像理解）
+    'anthropic-beta': 'files-api-2025-04-14',
+  };
+  if (!viaProxy) headers['x-api-key'] = trimmedKey;
+
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey.trim(),
-        'anthropic-version': '2023-06-01',
-        // 引用 Files API 上传的文档/图片时必须携带（文档：文件解析 / 图像理解）
-        'anthropic-beta': 'files-api-2025-04-14',
-      },
+      credentials: viaProxy ? 'same-origin' : undefined,
+      headers,
       body: JSON.stringify({ ...body, messages, stream: true }),
       signal,
     });

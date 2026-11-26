@@ -172,11 +172,17 @@ export async function runStream(
         now: Date.now(),
       });
 
+      const latestState = deps.getState();
+      const useProxy =
+        !settings.apiKey.trim() &&
+        (latestState.apiKeyConfigured || latestState.publicConfig.configured);
+
       const result = settings.mockMode
         ? await runMockChat({ messages: apiMessages, callbacks, signal: controller.signal })
         : await streamMessage({
             apiKey: settings.apiKey,
             baseUrl: settings.baseUrl,
+            useProxy,
             body,
             messages: apiMessages,
             signal: controller.signal,
@@ -247,7 +253,9 @@ export async function runStream(
       target.aborted = true;
     } else {
       target.error = err instanceof Error ? err.message : String(err);
-      if (err instanceof ApiError && err.status === 401) deps.setState({ view: 'settings' });
+      if (err instanceof ApiError && err.status === 401 && deps.getState().isAdmin) {
+        deps.setState({ view: 'settings' });
+      }
     }
   } finally {
     if (!isCurrent()) return;

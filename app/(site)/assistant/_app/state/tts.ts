@@ -44,7 +44,7 @@ export function createTts(deps: TtsDeps): TtsApi {
   };
 
   const speakMessage = async (messageId: string): Promise<void> => {
-    const { conversation, settings, tts } = deps.getState();
+    const { conversation, settings, tts, apiKeyConfigured, publicConfig } = deps.getState();
     const message = conversation?.messages.find((m) => m.id === messageId);
     if (!message) return;
     // 再点一次同一条：停止，不再重新合成
@@ -60,8 +60,12 @@ export function createTts(deps: TtsDeps): TtsApi {
       return;
     }
 
+    const hasKey =
+      Boolean(settings.apiKey.trim()) || apiKeyConfigured || publicConfig.configured;
+    const useProxy = !settings.apiKey.trim() && (apiKeyConfigured || publicConfig.configured);
+
     // 演示模式 / 没有 Key：退回系统朗读，保证交互完整
-    if (settings.mockMode || !settings.apiKey.trim()) {
+    if (settings.mockMode || !hasKey) {
       if (!('speechSynthesis' in window)) {
         deps.toast('当前浏览器不支持系统朗读', 'error');
         return;
@@ -81,6 +85,7 @@ export function createTts(deps: TtsDeps): TtsApi {
       const blob = await synthesizeSpeech({
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
+        useProxy,
         text: truncateForTts(text),
         voiceId: settings.voiceId,
         format: 'wav',
