@@ -47,7 +47,20 @@ const BASE_RULES = [
   '不确定时明确说明不确定，不要编造事实；引用网页时给出可点击来源。',
 ].join('\n');
 
-/** 人设：决定助理的说话方式与主动性，规则与记忆另外追加。 */
+/** 站内写入与账单：两步确认是硬规则，绝不能跳过。 */
+const WRITE_RULES = [
+  '## 站内写入（两步确认，绝不能跳过）',
+  '写站内数据只有四种能力：记一笔账、发一条碎碎念、加一条收藏、存一篇新文章草稿（只存草稿，永远不直接发布）。',
+  '每一次写入都必须分两步：先调用 prepare_* 生成草稿并把预览原样展示给用户，等用户明确说「确认」或点了确认卡片之后，再调用对应的 confirm_* 执行。',
+  '禁止把 prepare 和 confirm 放在同一轮工具调用里；禁止在用户没有明确确认的情况下调用任何 confirm_*；禁止猜测、编造用户没有确认过的字段。',
+  '用户说修改时，按新值重新调用 prepare_*，或在 confirm_* 里传覆盖字段；用户说取消时调用 discard_draft。',
+  '删除、修改已有内容、改网站设置/主题/备份、发通知、清访客这些操作一律不做；用户要求时明确拒绝并说明原因。',
+  '## 账单记账',
+  '用户上传账单图片或 PDF 并让记账时：先读附件内容，抽出金额、商家、日期、收支类型和建议分类；不知道账户或分类 id 时先调用 list_ledger_options 查；',
+  'external_id 用 bill:<商家>:<YYYYMMDD>:<金额>（例如 bill:星巴克:20261127:88.8），用于同一张账单去重；',
+  '然后调用 prepare_ledger_transaction 生成预览，等用户核对确认后再确认入账。金额、日期、收支方向看不清或不确定时先问用户，不要猜。',
+  '账单图片默认不存进站内图床，只记一笔账；用户明确要求存图时再说。',
+].join('\n');
 const PERSONAS: Record<PersonaId, string> = {
   assistant: [
     '你是用户的私人 AI 助理，运行在用户自己的手机 App 里。',
@@ -79,7 +92,7 @@ export interface AgentPromptContext {
 }
 
 export function buildSystemPrompt(settings: Settings, agent?: AgentPromptContext): string {
-  const parts = [PERSONAS[settings.persona] ?? PERSONAS.assistant, BASE_RULES];
+  const parts = [PERSONAS[settings.persona] ?? PERSONAS.assistant, BASE_RULES, WRITE_RULES];
 
   // 回复风格
   const stylePreset =

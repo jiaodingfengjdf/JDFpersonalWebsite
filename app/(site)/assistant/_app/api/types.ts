@@ -189,7 +189,7 @@ export interface ToolUseBlock {
   name: string;
   input: Record<string, unknown>;
   /** 本地执行结果，仅用于 UI 展示；回传服务端前会被剥掉。 */
-  result?: { content: string; is_error?: boolean };
+  result?: { content: string; is_error?: boolean; data?: unknown };
 }
 
 /** 客户端工具结果，放在 user 消息里回传。 */

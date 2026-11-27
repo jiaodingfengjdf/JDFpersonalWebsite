@@ -105,4 +105,25 @@ describe("ledger service", () => {
       connection.close();
     }
   });
+
+  it("rejects a duplicate external_id with a conflict instead of a 500", async () => {
+    const connection = openDatabase(":memory:");
+    try {
+      runMigrations(connection);
+      const ledger = createLedgerService(drizzle(connection, { schema }));
+      const account = await ledger.createAccount({
+        name: "去重账户", kind: "cash", initial_balance: 0, currency: "CNY", sort: 0,
+      });
+      const base = {
+        account_id: account.id, category_id: null, kind: "expense" as const, amount: 88.8,
+        occurred_at: parseLedgerDate("2026-01-02"), merchant: "测试商家", note: "", tags: [],
+        external_id: "bill:测试商家:20260102:88.8",
+      };
+      const created = await ledger.createTransaction(base);
+      expect(created.external_id).toBe("bill:测试商家:20260102:88.8");
+      await expect(ledger.createTransaction(base)).rejects.toThrow("重复入账");
+    } finally {
+      connection.close();
+    }
+  });
 });

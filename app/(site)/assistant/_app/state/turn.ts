@@ -219,7 +219,7 @@ export async function runStream(
       for (const call of toolUses) {
         const outcome = await deps.executeTool(call.name, call.input, ctx);
         // 结果挂在调用块上：UI 直接展示，历史回传时会剥掉这个字段
-        call.result = { content: outcome.content, is_error: !outcome.ok };
+        call.result = { content: outcome.content, is_error: !outcome.ok, data: outcome.data };
         results.push({
           type: 'tool_result',
           tool_use_id: call.id,

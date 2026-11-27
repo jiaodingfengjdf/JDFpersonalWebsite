@@ -176,4 +176,63 @@ describe("POST /api/assistant/proxy/[...path]", () => {
     const hdrs = new Headers(init.headers);
     expect(hdrs.get("authorization")).toBe("Bearer sk-secret-image-8888");
   });
+
+  it("forwards PDF file uploads to DeepSeek /files with the server key", async () => {
+    mockLoadRuntime.mockResolvedValue({
+      baseUrl: "https://api.deepseek.com",
+      apiKey: "sk-test-server-key",
+      imageBaseUrl: "https://grsai.dakka.com.cn",
+      imageApiKey: "sk-secret-image-8888",
+      model: "deepseek-flash",
+      systemPrompt: "",
+      mockMode: false,
+    });
+
+    const upstreamSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ id: "file_abc", filename: "bill.pdf", bytes: 1234, purpose: "rich_layout_recognition" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    globalThis.fetch = upstreamSpy as unknown as typeof fetch;
+
+    const form = new FormData();
+    form.append("purpose", "rich_layout_recognition");
+    form.append("file", new Blob(["%PDF-bill"], { type: "application/pdf" }), "bill.pdf");
+    const req = new NextRequest("http://localhost:3000/api/assistant/proxy/files", {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:3000",
+        host: "localhost:3000",
+      },
+      body: form,
+    });
+
+    const res = await POST(req, { params: Promise.resolve({ path: ["files"] }) });
+    expect(res.status).toBe(200);
+    expect(upstreamSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = upstreamSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.deepseek.com/files");
+    const hdrs = new Headers(init.headers);
+    expect(hdrs.get("authorization")).toBe("Bearer sk-test-server-key");
+    const data = (await res.json()) as { id?: string };
+    expect(data.id).toBe("file_abc");
+  });
+
+  it("rejects anonymous file uploads with 401", async () => {
+    mockGetAdminSession.mockResolvedValue(null);
+    const form = new FormData();
+    form.append("purpose", "rich_layout_recognition");
+    form.append("file", new Blob(["%PDF-bill"], { type: "application/pdf" }), "bill.pdf");
+    const req = new NextRequest("http://localhost:3000/api/assistant/proxy/files", {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:3000",
+        host: "localhost:3000",
+      },
+      body: form,
+    });
+    const res = await POST(req, { params: Promise.resolve({ path: ["files"] }) });
+    expect(res.status).toBe(401);
+  });
 });

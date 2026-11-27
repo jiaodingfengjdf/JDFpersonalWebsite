@@ -16,10 +16,12 @@ import { kvGet, kvSet } from '../lib/idb';
 import {
   DEFAULT_SETTINGS,
   type Attachment,
+  type ChatMessage,
   type Conversation,
   type Settings,
 } from '../api/types';
 import { uid } from '../lib/uid';
+import { discardDraft } from '../agent/drafts';
 import { themeHost } from '../lib/themeHost';
 import type { AgentNote, AgentTask, Memory } from '../agent/types';
 import { executeTool } from '../agent/tools';
@@ -999,6 +1001,58 @@ export function stopStreaming(): void {
     streamAbort.abort();
     streamAbort = null;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* 确认卡：从 UI 直接确认 / 取消一次待确认写入                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 确认卡上的「确认写入」：直接执行对应的 confirm_* 工具（草稿单次消费），
+ * 再把结果作为一条新助理消息追加进当前会话并落盘。
+ * 注意：这里不走模型，点按钮本身就是用户的明确确认。
+ */
+export async function confirmPendingDraft(
+  draftId: string,
+  confirmTool: string,
+  overrides: Record<string, unknown>,
+): Promise<{ ok: boolean; message: string }> {
+  if (!state.isAdmin) {
+    toast('私人 AI 助理仅限站长本人登录使用', 'info');
+    return { ok: false, message: '私人 AI 助理仅限站长本人登录使用' };
+  }
+  if (state.streaming) {
+    toast('正在生成回答，请先停止', 'info');
+    return { ok: false, message: '正在生成回答，请先停止' };
+  }
+  const outcome = await executeTool(
+    confirmTool,
+    { draft_id: draftId, ...overrides },
+    toolContext(),
+  );
+  const conv = state.conversation;
+  if (!conv) {
+    toast('没有进行中的会话', 'error');
+    return { ok: false, message: '没有进行中的会话' };
+  }
+  const message: ChatMessage = {
+    id: uid('msg'),
+    role: 'assistant',
+    createdAt: Date.now(),
+    blocks: [{ type: 'text', text: outcome.content }],
+    model: state.settings.model,
+  };
+  const next: Conversation = { ...conv, messages: [...conv.messages, message] };
+  setState({ conversation: next });
+  await persistConversation(next);
+  schedulePersist();
+  if (!outcome.ok) toast(outcome.content, 'error');
+  return { ok: outcome.ok, message: outcome.content };
+}
+
+/** 确认卡上的「取消」：丢弃草稿，不写库、没有任何副作用。 */
+export function discardPendingDraft(draftId: string): void {
+  discardDraft(draftId);
 }
 
 /* ------------------------------------------------------------------ */

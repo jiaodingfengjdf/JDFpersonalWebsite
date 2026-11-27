@@ -14,6 +14,8 @@ import type {
 } from '../../api/types';
 import Markdown, { citationMarker } from '../../ui/markdown';
 import { hostOf, textWithCitationMarkers } from '../../lib/message';
+import type { WritePreviewData } from '../../agent/tools';
+import { confirmPendingDraft, discardPendingDraft } from '../../state/store';
 import {
   BookIcon,
   BrainIcon,
@@ -49,6 +51,21 @@ const CLIENT_TOOL_LABEL: Record<string, { label: string; summaryKey?: string }> 
   add_note: { label: '保存笔记', summaryKey: 'title' },
   list_notes: { label: '查找笔记', summaryKey: 'query' },
   get_time: { label: '查看时间' },
+  generate_image: { label: '生成图片', summaryKey: 'prompt' },
+  web_search: { label: '联网搜索', summaryKey: 'query' },
+  read_page: { label: '阅读网页', summaryKey: 'url' },
+  site_query: { label: '查询站点数据', summaryKey: 'resource' },
+  site_search: { label: '搜索站内知识', summaryKey: 'query' },
+  list_ledger_options: { label: '查看账本账户与分类' },
+  prepare_ledger_transaction: { label: '准备记账', summaryKey: 'merchant' },
+  confirm_ledger_transaction: { label: '确认记账' },
+  prepare_chatter: { label: '准备碎碎念', summaryKey: 'content' },
+  confirm_chatter: { label: '确认发碎碎念' },
+  prepare_collection: { label: '准备收藏', summaryKey: 'title' },
+  confirm_collection: { label: '确认加收藏' },
+  prepare_post_draft: { label: '准备文章草稿', summaryKey: 'title' },
+  confirm_post_draft: { label: '确认存草稿' },
+  discard_draft: { label: '取消写入' },
 };
 
 function clientToolSummary(block: ToolUseBlock): string {
@@ -330,6 +347,103 @@ export function ToolCallCard({
 /* 整条回答                                                           */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* 待确认写入卡片                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * prepare_* 工具返回的确认卡：展示待写入内容，下拉框可改账户/分类/状态，
+ * 点「确认写入」才会真正写库；点「取消」则丢弃草稿、没有任何副作用。
+ * 确认/取消都直接走 store，不经过模型。
+ */
+function WritePreviewCard({ preview }: { preview: WritePreviewData }) {
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [status, setStatus] = useState<'idle' | 'confirming' | 'confirmed' | 'cancelled'>('idle');
+  const [error, setError] = useState('');
+
+  const valueOf = (key: string, fallback: string): string => overrides[key] ?? fallback;
+
+  const onConfirm = async (): Promise<void> => {
+    setStatus('confirming');
+    setError('');
+    const changed: Record<string, unknown> = {};
+    for (const field of preview.fields) {
+      const value = valueOf(field.key, field.value);
+      if (value !== field.value) changed[field.key] = value;
+    }
+    const result = await confirmPendingDraft(preview.draftId, preview.confirmTool, changed);
+    if (result.ok) {
+      setStatus('confirmed');
+    } else {
+      setStatus('idle');
+      setError(result.message);
+    }
+  };
+
+  const onCancel = (): void => {
+    discardPendingDraft(preview.draftId);
+    setStatus('cancelled');
+  };
+
+  if (status === 'confirmed') {
+    return <div className="write-preview-done">✓ 已确认写入，结果见下方新消息。</div>;
+  }
+  if (status === 'cancelled') {
+    return <div className="write-preview-done">已取消，没有改动任何数据。</div>;
+  }
+
+  return (
+    <div className="write-preview">
+      <div className="write-preview-title">{preview.title} · 待确认</div>
+      <div className="write-preview-rows">
+        {preview.fields.map((field) => (
+          <label key={field.key} className="write-preview-row">
+            <span className="write-preview-label">{field.label}</span>
+            {field.options ? (
+              <select
+                className="write-preview-select"
+                value={valueOf(field.key, field.value)}
+                disabled={status === 'confirming'}
+                onChange={(event) =>
+                  setOverrides((prev) => ({ ...prev, [field.key]: event.target.value }))
+                }
+              >
+                {field.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="write-preview-value">{field.value}</span>
+            )}
+          </label>
+        ))}
+      </div>
+      <p className="write-preview-hint">核对无误后点「确认写入」才会真正写库；改了下拉框再点确认，会按改后的值写入。</p>
+      {error ? <div className="write-preview-error">{error}</div> : null}
+      <div className="write-preview-actions">
+        <button
+          type="button"
+          className="write-preview-confirm"
+          disabled={status === 'confirming'}
+          onClick={() => void onConfirm()}
+        >
+          {status === 'confirming' ? '写入中…' : '确认写入'}
+        </button>
+        <button
+          type="button"
+          className="write-preview-cancel"
+          disabled={status === 'confirming'}
+          onClick={onCancel}
+        >
+          取消
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** 客户端工具（记忆 / 任务 / 笔记 / 时间）的一次调用 */
 export function ClientToolCard({ block }: { block: ToolUseBlock }) {
   const [open, setOpen] = useState(false);
@@ -337,6 +451,8 @@ export function ClientToolCard({ block }: { block: ToolUseBlock }) {
   const summary = clientToolSummary(block);
   const result = block.result;
   const failed = Boolean(result?.is_error);
+  const preview = (result?.data as { writePreview?: WritePreviewData } | undefined)
+    ?.writePreview;
 
   return (
     <div className={`tool-card tool-client${open ? ' is-open' : ''}${failed ? ' is-error' : ''}`}>
@@ -360,6 +476,11 @@ export function ClientToolCard({ block }: { block: ToolUseBlock }) {
         )}
         <ChevronDownIcon size={15} className="tool-chev" />
       </button>
+      {preview ? (
+        <div className="tool-body">
+          <WritePreviewCard preview={preview} />
+        </div>
+      ) : null}
       {open ? (
         <div className="tool-body">
           <pre className="tool-result">{result?.content ?? '执行中…'}</pre>

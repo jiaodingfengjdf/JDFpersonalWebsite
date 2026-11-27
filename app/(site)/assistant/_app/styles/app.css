@@ -700,6 +700,119 @@ a {
   gap: 8px;
 }
 
+/* ---------- 待确认写入卡片 ---------- */
+
+.write-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+
+.write-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.write-preview-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.write-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.write-preview-label {
+  flex: none;
+  width: 52px;
+  color: var(--text-3);
+}
+
+.write-preview-value {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.write-preview-select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.write-preview-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.write-preview-error {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+.write-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.write-preview-confirm,
+.write-preview-cancel {
+  padding: 7px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.write-preview-confirm {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+
+.write-preview-confirm:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.write-preview-cancel {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+}
+
+.write-preview-cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.write-preview-done {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

@@ -294,22 +294,35 @@ export function createLedgerService(db: AppDatabase) {
     async createTransaction(input: TransactionInput): Promise<LedgerTransaction> {
       await assertTransactionRefs(input);
       const now = new Date();
-      const [row] = await db
-        .insert(ledgerTxn)
-        .values({
-          accountId: input.account_id,
-          categoryId: input.category_id,
-          kind: input.kind,
-          amount: round2(input.amount),
-          occurredAt: input.occurred_at,
-          merchant: input.merchant,
-          note: input.note,
-          tags: JSON.stringify(input.tags),
-          externalId: input.external_id || null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning({ id: ledgerTxn.id });
+      let row: { id: number } | undefined;
+      try {
+        [row] = await db
+          .insert(ledgerTxn)
+          .values({
+            accountId: input.account_id,
+            categoryId: input.category_id,
+            kind: input.kind,
+            amount: round2(input.amount),
+            occurredAt: input.occurred_at,
+            merchant: input.merchant,
+            note: input.note,
+            tags: JSON.stringify(input.tags),
+            externalId: input.external_id || null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: ledgerTxn.id });
+      } catch (err) {
+        // external_id 有唯一索引：同一张账单重复入账时报 409，而不是 500。
+        const code =
+          typeof err === "object" && err !== null && "code" in err
+            ? String((err as { code?: unknown }).code ?? "")
+            : "";
+        if (code.startsWith("SQLITE_CONSTRAINT")) {
+          throw errors.conflict("该编号的流水已存在，可能是重复入账");
+        }
+        throw err;
+      }
       if (!row) throw errors.internal("保存流水失败");
       const created = await findTransaction(row.id);
       return (

@@ -1015,6 +1015,119 @@ html.dark .assistant-root,
   gap: 8px;
 }
 
+/* ---------- 待确认写入卡片 ---------- */
+
+.assistant-root .write-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+
+.assistant-root .write-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.assistant-root .write-preview-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-root .write-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.assistant-root .write-preview-label {
+  flex: none;
+  width: 52px;
+  color: var(--text-3);
+}
+
+.assistant-root .write-preview-value {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.assistant-root .write-preview-select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.assistant-root .write-preview-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.assistant-root .write-preview-error {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+.assistant-root .write-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.assistant-root .write-preview-confirm,
+.assistant-root .write-preview-cancel {
+  padding: 7px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.assistant-root .write-preview-confirm {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+
+.assistant-root .write-preview-confirm:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.assistant-root .write-preview-cancel {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+}
+
+.assistant-root .write-preview-cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.assistant-root .write-preview-done {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
 .assistant-root .tool-result {
   margin: 0;
   padding: 10px 12px;
