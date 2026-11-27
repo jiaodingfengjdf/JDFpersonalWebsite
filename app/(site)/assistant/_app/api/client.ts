@@ -5,6 +5,7 @@
  * 文档：https://api-docs.deepseek.com/zh-cn/guides/build_a_chatbot
  */
 import { iterateSse } from '../lib/sse';
+import { ASSISTANT_DEFAULT_MODEL, assistantModelDisplayName } from '@/lib/assistant-models';
 import type {
   AssistantBlock,
   Citation,
@@ -29,6 +30,8 @@ export interface ChatResult {
   title?: string;
   /** 是否用过服务端联网工具（用过则不能「继续生成」）。 */
   usedTools: boolean;
+  /** 请求的模型不可用时已自动回落到默认模型，给 UI 的提示（无回落时为空）。 */
+  fallbackNotice?: string;
 }
 
 export interface NonStreamArgs {
@@ -38,6 +41,8 @@ export interface NonStreamArgs {
   body: Omit<CreateMessageRequest, 'messages' | 'stream'>;
   messages: CreateMessageRequest['messages'];
   signal?: AbortSignal;
+  /** 覆盖默认客户端超时（仅测试用；生产默认 55 秒）。 */
+  timeoutMs?: number;
 }
 
 export interface NonStreamResult {
@@ -45,6 +50,158 @@ export interface NonStreamResult {
   stopReason: StopReason;
   usage?: Usage;
   text: string;
+  /** 请求的模型不可用时已自动回落到默认模型，给 UI 的提示（无回落时为空）。 */
+  fallbackNotice?: string;
+}
+
+/** 客户端超时：小于代理的 60 秒，超时后给友好提示而不是等服务端掐断。 */
+export const CLIENT_TIMEOUT_MS = 55_000;
+/** 429/503 只重试一次。 */
+const MAX_RETRIES = 1;
+const RETRYABLE_STATUSES = new Set([429, 503]);
+const RETRY_DELAY_MS = 800;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface TimeoutHandle {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  cancel: () => void;
+}
+
+/**
+ * 合并用户取消信号与超时信号。超时触发时 timedOut() 为真，
+ * 调用方据此区分「用户主动停止」与「请求超时」。
+ */
+function withClientTimeout(
+  userSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): TimeoutHandle {
+  const timeoutController = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    timeoutController.abort();
+  }, timeoutMs);
+  const cancel = () => clearTimeout(timer);
+
+  let signal: AbortSignal = timeoutController.signal;
+  if (userSignal) {
+    if (typeof AbortSignal.any === 'function') {
+      signal = AbortSignal.any([userSignal, timeoutController.signal]);
+    } else {
+      const combined = new AbortController();
+      const abortCombined = () => combined.abort();
+      userSignal.addEventListener('abort', abortCombined, { once: true });
+      timeoutController.signal.addEventListener('abort', abortCombined, { once: true });
+      signal = combined.signal;
+    }
+  }
+  return { signal, timedOut: () => timedOut, cancel };
+}
+
+function errorMessageOf(payload: unknown): string {
+  if (payload && typeof payload === 'object') {
+    return String(
+      (payload as { error?: { message?: string } }).error?.message ??
+        (payload as { message?: string }).message ??
+        '',
+    );
+  }
+  return typeof payload === 'string' ? payload : '';
+}
+
+/** 只有「模型不存在/不支持」这类错误才触发回落；其他 400（如内容审核）不回落。 */
+function isModelNotFound(status: number, message: string): boolean {
+  if (status !== 404 && status !== 400) return false;
+  return (
+    /model/i.test(message) &&
+    /(not found|does not exist|unknown|invalid|unsupported|不存在|未知)/i.test(message)
+  );
+}
+
+interface PostMessagesArgs {
+  url: string;
+  headers: Record<string, string>;
+  credentials?: RequestCredentials;
+  payload: Record<string, unknown>;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  /** 用户主动取消时抛出的提示（流式「已停止生成」，非流式「已取消」）。 */
+  abortMessage: string;
+}
+
+interface PostMessagesResult {
+  res: Response;
+  fallbackNotice?: string;
+  /** 成功返回时调用方持有它：流式读完后再 cancel；失败时本函数已自行 cancel。 */
+  timeout: TimeoutHandle;
+}
+
+/**
+ * 发一次 Messages 请求，带 429/503 一次指数退避重试、55 秒客户端超时、
+ * 模型不存在时一次回落到默认模型。成功时返回响应（res.ok 一定为真），
+ * 终态失败时抛 ApiError。
+ */
+async function postMessages(args: PostMessagesArgs): Promise<PostMessagesResult> {
+  const timeoutMs = args.timeoutMs ?? CLIENT_TIMEOUT_MS;
+  const timeout = withClientTimeout(args.signal, timeoutMs);
+  let retries = 0;
+  let fallbackUsed = false;
+  let fallbackNotice: string | undefined;
+  let payload = args.payload;
+  try {
+    for (;;) {
+      let res: Response;
+      try {
+        res = await fetch(args.url, {
+          method: 'POST',
+          credentials: args.credentials,
+          headers: args.headers,
+          body: JSON.stringify(payload),
+          signal: timeout.signal,
+        });
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          if (timeout.timedOut()) {
+            throw new ApiError(
+              `请求超时（${Math.round(timeoutMs / 1000)} 秒），请重试或切换到更快的模型`,
+              { code: 'client_timeout' },
+            );
+          }
+          throw new ApiError(args.abortMessage, { code: 'aborted' });
+        }
+        throw new ApiError(`网络请求失败：${(err as Error).message}`, { code: 'network_error' });
+      }
+
+      if (res.ok) return { res, fallbackNotice, timeout };
+
+      const errorPayload = await readErrorPayload(res);
+      const message = errorMessageOf(errorPayload);
+
+      if (RETRYABLE_STATUSES.has(res.status) && retries < MAX_RETRIES) {
+        retries += 1;
+        await sleep(RETRY_DELAY_MS * retries);
+        continue;
+      }
+      if (
+        !fallbackUsed &&
+        payload.model !== ASSISTANT_DEFAULT_MODEL &&
+        isModelNotFound(res.status, message)
+      ) {
+        fallbackUsed = true;
+        fallbackNotice = `模型「${String(payload.model)}」不可用，已自动切换到 ${assistantModelDisplayName(ASSISTANT_DEFAULT_MODEL)} 继续生成`;
+        payload = { ...payload, model: ASSISTANT_DEFAULT_MODEL };
+        continue;
+      }
+      throw friendlyHttpError(res.status, errorPayload);
+    }
+  } catch (err) {
+    timeout.cancel();
+    throw err;
+  }
 }
 
 /**
@@ -65,38 +222,36 @@ export async function createMessage(args: NonStreamArgs): Promise<NonStreamResul
   };
   if (!viaProxy) headers['x-api-key'] = trimmedKey;
 
-  let res: Response;
+  const { res, fallbackNotice, timeout } = await postMessages({
+    url,
+    headers,
+    credentials: viaProxy ? 'same-origin' : undefined,
+    payload: { ...body, messages, stream: false },
+    signal,
+    timeoutMs: args.timeoutMs,
+    abortMessage: '已取消',
+  });
+
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      credentials: viaProxy ? 'same-origin' : undefined,
-      headers,
-      body: JSON.stringify({ ...body, messages, stream: false }),
-      signal,
-    });
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') throw new ApiError('已取消', { code: 'aborted' });
-    throw new ApiError(`网络请求失败：${(err as Error).message}`, { code: 'network_error' });
+    const payload = (await res.json()) as {
+      content?: AssistantBlock[];
+      stop_reason?: StopReason;
+      usage?: Usage;
+      error?: { message?: string };
+    };
+    if (payload.error) {
+      throw new ApiError(payload.error.message ?? '服务端返回错误', { code: 'stream_error' });
+    }
+    const blocks = (payload.content ?? []).filter(Boolean);
+    const text = blocks
+      .filter((b): b is Extract<AssistantBlock, { type: 'text' }> => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim();
+    return { blocks, stopReason: payload.stop_reason ?? null, usage: payload.usage, text, fallbackNotice };
+  } finally {
+    timeout.cancel();
   }
-
-  if (!res.ok) throw friendlyHttpError(res.status, await readErrorPayload(res));
-
-  const payload = (await res.json()) as {
-    content?: AssistantBlock[];
-    stop_reason?: StopReason;
-    usage?: Usage;
-    error?: { message?: string };
-  };
-  if (payload.error) {
-    throw new ApiError(payload.error.message ?? '服务端返回错误', { code: 'stream_error' });
-  }
-  const blocks = (payload.content ?? []).filter(Boolean);
-  const text = blocks
-    .filter((b): b is Extract<AssistantBlock, { type: 'text' }> => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
-    .trim();
-  return { blocks, stopReason: payload.stop_reason ?? null, usage: payload.usage, text };
 }
 
 export interface ChatCallbacks {
@@ -161,6 +316,8 @@ export interface StreamMessageArgs {
   messages: CreateMessageRequest['messages'];
   signal?: AbortSignal;
   callbacks?: ChatCallbacks;
+  /** 覆盖默认客户端超时（仅测试用；生产默认 55 秒）。 */
+  timeoutMs?: number;
 }
 
 function friendlyHttpError(status: number, payload: unknown): ApiError {
@@ -241,24 +398,23 @@ export async function streamMessage(args: StreamMessageArgs): Promise<ChatResult
   if (!viaProxy) headers['x-api-key'] = trimmedKey;
 
   let res: Response;
+  let fallbackNotice: string | undefined;
+  let timeout: TimeoutHandle;
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      credentials: viaProxy ? 'same-origin' : undefined,
+    ({ res, fallbackNotice, timeout } = await postMessages({
+      url,
       headers,
-      body: JSON.stringify({ ...body, messages, stream: true }),
+      credentials: viaProxy ? 'same-origin' : undefined,
+      payload: { ...body, messages, stream: true },
       signal,
-    });
+      timeoutMs: args.timeoutMs,
+      abortMessage: '已停止生成',
+    }));
   } catch (err) {
-    if ((err as Error).name === 'AbortError') {
-      throw new ApiError('已停止生成', { code: 'aborted' });
-    }
-    throw new ApiError(`网络请求失败：${(err as Error).message}`, { code: 'network_error' });
+    // postMessages 已把超时/取消/网络失败转成 ApiError，直接透传。
+    throw err;
   }
 
-  if (!res.ok) {
-    throw friendlyHttpError(res.status, await readErrorPayload(res));
-  }
   if (!res.body) {
     throw new ApiError('响应为空', { code: 'empty_response' });
   }
@@ -277,7 +433,8 @@ export async function streamMessage(args: StreamMessageArgs): Promise<ChatResult
     blocks[index] = block;
   };
 
-  for await (const frame of iterateSse(res.body)) {
+  try {
+    for await (const frame of iterateSse(res.body)) {
     if (!frame.data) continue;
     let parsed: unknown;
     try {
@@ -351,20 +508,35 @@ export async function streamMessage(args: StreamMessageArgs): Promise<ChatResult
     if (finished) break;
   }
 
-  if (streamError) throw streamError;
-  if (!finished) {
-    throw new ApiError('流式响应被中断（未收到 message_stop），可点击「继续」或重新生成', {
-      code: 'incomplete_stream',
-    });
-  }
+    if (streamError) throw streamError;
+    if (!finished) {
+      throw new ApiError('流式响应被中断（未收到 message_stop），可点击「继续」或重新生成', {
+        code: 'incomplete_stream',
+      });
+    }
 
-  return {
-    id: messageId,
-    model,
-    blocks: blocks.filter(Boolean),
-    stopReason,
-    usage,
-    title,
-    usedTools,
-  };
+    return {
+      id: messageId,
+      model,
+      blocks: blocks.filter(Boolean),
+      stopReason,
+      usage,
+      title,
+      usedTools,
+      fallbackNotice,
+    };
+  } catch (err) {
+    // 流中途被掐断：超时（55 秒无数据）与用户主动停止要区分提示。
+    if ((err as Error).name === 'AbortError') {
+      if (timeout.timedOut()) {
+        throw new ApiError('请求超时（55 秒），请重试或切换到更快的模型', {
+          code: 'client_timeout',
+        });
+      }
+      throw new ApiError('已停止生成', { code: 'aborted' });
+    }
+    throw err;
+  } finally {
+    timeout.cancel();
+  }
 }

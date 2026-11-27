@@ -199,6 +199,9 @@ export async function runStream(
       target.usage = result.usage;
       target.model = result.model ?? target.model;
       target.refused = result.stopReason === 'refusal';
+      if (result.fallbackNotice) {
+        deps.toast(result.fallbackNotice, 'info');
+      }
       usedTools = usedTools || result.usedTools;
       if (result.title && titleEnabled) {
         conv.title = result.title;

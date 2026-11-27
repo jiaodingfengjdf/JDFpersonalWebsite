@@ -531,7 +531,7 @@ const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
     schema: {
       name: 'site_query',
       description:
-        '查询用户自己站点上的数据：行情（自选基金/股票/指数）、账本（本月收支）、收藏、新闻、NBA 赛程、每日简报。用户问「我的基金怎么样」「这个月花了多少」「今天有什么新闻」「今天有比赛吗」这类问题时调用。账本需要站点处于管理员登录状态，未登录会返回提示。',
+        '查询用户自己站点上的结构化数据：行情（自选基金/股票/指数）、账本（本月收支）、收藏、新闻、NBA 赛程、每日简报。用户问「我的基金怎么样」「这个月花了多少」「今天有什么新闻」「今天有比赛吗」这类问题时调用。查站内文章请用 site_search，不要用这个工具。账本需要站点处于管理员登录状态，未登录会返回提示。',
       input_schema: {
         type: 'object',
         properties: {
@@ -637,6 +637,76 @@ const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
 
         if (lines.length === 0) return ok('查询成功，但站点上还没有对应的数据。');
         return ok(lines.slice(0, MAX_LINES + 6).join('\n'), { resource });
+      }),
+  },
+
+  site_search: {
+    schema: {
+      name: 'site_search',
+      description:
+        '在用户自己的个人网站里按关键词搜索站内知识：已发布文章、公开收藏与订阅新闻，返回带来源链接的结果（最多 5 条）。用户问「我站里写过什么」「关于 XX 的文章」「我的收藏里有没有 XX」「站里关于 XX 的新闻」这类问题时调用。只读，不会改站内数据；需要站长登录，未登录会返回提示。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '搜索关键词，例如「智能体」「NBA」。',
+          },
+          limit: {
+            type: 'number',
+            description: '可选，最多返回多少条，默认 5，最大 5。',
+          },
+        },
+        required: ['query'],
+      },
+    },
+    run: (input) =>
+      guard('搜索站内知识', async () => {
+        const query = readString(input, 'query') || pickAnyText(input);
+        if (!query) return fail('搜索关键词不能为空：请给出要查的词。');
+        const limitRaw = Number(input.limit);
+        const limit = Number.isFinite(limitRaw) ? Math.min(5, Math.max(1, limitRaw)) : 5;
+        const response = await fetch(
+          `/api/assistant/site-knowledge?q=${encodeURIComponent(query)}&limit=${limit}`,
+          { credentials: 'include' },
+        );
+        if (!response.ok) {
+          return fail(
+            response.status === 401
+              ? '站内知识搜索需要站长登录。'
+              : `站内知识接口返回 HTTP ${response.status}`,
+          );
+        }
+        const data = (await response.json()) as {
+          query?: string;
+          total?: number;
+          results?: Array<{
+            kind?: string;
+            title?: string;
+            snippet?: string;
+            url?: string;
+            source?: string;
+          }>;
+        };
+        const results = asArray<Record<string, unknown>>(data.results);
+        if (results.length === 0) {
+          return ok(`站内没有找到和「${query}」相关的内容。`);
+        }
+        const kindLabel: Record<string, string> = {
+          post: '文章',
+          collection: '收藏',
+          news: '新闻',
+        };
+        const lines = results.map((item) => {
+          const kind = kindLabel[String(item.kind ?? '')] ?? '站内';
+          const title = String(item.title ?? '（无标题）');
+          const snippet = String(item.snippet ?? '').trim();
+          const url = String(item.url ?? '');
+          return `- ${title}（${kind}）：${snippet}${url ? ` —— ${url}` : ''}`;
+        });
+        const total = typeof data.total === 'number' ? data.total : results.length;
+        if (total > results.length) lines.push(`（共 ${total} 条，仅列出前 ${results.length} 条）`);
+        return ok(lines.join('\n'), { query, total });
       }),
   },
 

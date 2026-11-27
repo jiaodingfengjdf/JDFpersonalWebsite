@@ -17,6 +17,7 @@ import type {
   Settings,
   UserBlock,
 } from './types';
+import { ASSISTANT_DEFAULT_MODEL } from '@/lib/assistant-models';
 import { AGENT_TEAM, REPLY_STYLES } from './types';
 import type { AgentTask, Memory } from '../agent/types';
 import { buildMemorySection, buildTaskSection, selectMemoriesForPrompt } from '../agent/memory';
@@ -220,7 +221,7 @@ export function buildRequestBody(
   tools.push(...CLIENT_TOOL_SCHEMAS);
 
   const body: Omit<CreateMessageRequest, 'messages'> = {
-    model: settings.model.trim() || 'deepseek-flash',
+    model: settings.model.trim() || ASSISTANT_DEFAULT_MODEL,
     max_tokens: settings.maxTokens > 0 ? settings.maxTokens : undefined,
     thinking: { type: settings.thinking ? 'enabled' : 'disabled' },
     system: buildSystemPrompt(settings, agent),

@@ -7,6 +7,7 @@ import { errors } from "@/server/http/errors";
 import { logError } from "@/server/http/logger";
 import {
   ASSISTANT_EFFORTS,
+  ASSISTANT_MODEL_IDS,
   ASSISTANT_PERSONAS,
   ASSISTANT_REPLY_STYLES,
   ASSISTANT_SETTINGS_CONFIG_KEY,
@@ -16,6 +17,7 @@ import {
   type AssistantAdminSettingsInput,
   type AssistantAdminSettingsView,
   type AssistantEffort,
+  type AssistantModelId,
   type AssistantPersona,
   type AssistantPublicConfig,
   type AssistantReplyStyle,
@@ -30,7 +32,7 @@ interface StoredAssistantSettings {
   displayName: string;
   welcomeMessage: string;
   baseUrl: string;
-  model: string;
+  model: AssistantModelId;
   maxTokens: number;
   systemPrompt: string;
   thinking: boolean;
@@ -99,7 +101,8 @@ function normalizeStored(raw: unknown, fallbackUpdatedAt: string | null): Stored
     displayName: str(obj.displayName, d.displayName).trim() || d.displayName,
     welcomeMessage: str(obj.welcomeMessage, d.welcomeMessage),
     baseUrl: str(obj.baseUrl, d.baseUrl).trim() || d.baseUrl,
-    model: str(obj.model, d.model).trim() || d.model,
+    // 旧库里可能存着注册表之外的模型名：读时回落到默认模型，写时由 zod 枚举拦截。
+    model: oneOf(str(obj.model, d.model).trim(), ASSISTANT_MODEL_IDS, d.model),
     maxTokens,
     systemPrompt: str(obj.systemPrompt, d.systemPrompt),
     thinking: bool(obj.thinking, d.thinking),

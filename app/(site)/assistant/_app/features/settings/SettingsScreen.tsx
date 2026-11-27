@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Settings } from '../../api/types';
 import { AGENT_TEAM, REPLY_STYLES, type ReplyStyleId } from '../../api/types';
+import { ASSISTANT_MODEL_REGISTRY } from '@/lib/assistant-models';
 import { downloadJson, pickFile } from '../../lib/download';
 import {
   addSkill,
@@ -378,8 +379,11 @@ export default function SettingsScreen() {
                 value={settings.model}
                 onChange={(e) => set('model', e.target.value)}
               >
-                <option value="deepseek-flash">deepseek-flash</option>
-                <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+                {ASSISTANT_MODEL_REGISTRY.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
               </select>
             </Row>
             <Row label="最大输出" hint="max_tokens">

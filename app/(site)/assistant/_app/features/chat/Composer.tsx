@@ -7,6 +7,7 @@ import { compressImage } from '../../lib/image';
 import { formatBytes } from '../../lib/format';
 import { uid } from '../../lib/uid';
 import { sendMessage, stopStreaming, toast, updateSettings, useApp } from '../../state/store';
+import { ASSISTANT_MODEL_REGISTRY, assistantModelInfo } from '@/lib/assistant-models';
 import { openImageViewer } from '../../ui/imageViewer';
 import {
   BrainIcon,
@@ -21,7 +22,8 @@ import {
   XIcon,
 } from '../../ui/Icons';
 
-const MODEL_OPTIONS = ['deepseek-flash', 'deepseek-v4-pro'];
+/** 模型列表：唯一事实源在 @/lib/assistant-models。 */
+const MODEL_OPTIONS = ASSISTANT_MODEL_REGISTRY;
 
 const EFFORT_LABEL: Record<string, string> = {
   '': '默认',
@@ -503,7 +505,7 @@ export default function Composer({
                   aria-expanded={modelMenu}
                   aria-label="切换模型"
                 >
-                  <span className="model-short">{activeModel.replace('deepseek-', '') || 'flash'}</span>
+                  <span className="model-short">{assistantModelInfo(activeModel).shortName}</span>
                   <ChevronDownIcon size={12} />
                 </button>
                 <button
@@ -545,7 +547,7 @@ export default function Composer({
                   className="tool-toggle is-readonly composer-model-chip"
                   title="模型参数由站长统一配置"
                 >
-                  <span className="model-short">{activeModel.replace('deepseek-', '') || 'flash'}</span>
+                  <span className="model-short">{assistantModelInfo(activeModel).shortName}</span>
                 </span>
                 {webSearchOn ? (
                   <span className="tool-toggle is-readonly on" title="站长已开启联网搜索">
@@ -614,18 +616,18 @@ export default function Composer({
             <div className="model-menu" role="menu" aria-label="模型列表">
               {MODEL_OPTIONS.map((option) => (
                 <button
-                  key={option}
+                  key={option.id}
                   type="button"
                   role="menuitemradio"
-                  aria-checked={settings.model === option}
-                  className={settings.model === option ? 'is-on' : ''}
+                  aria-checked={settings.model === option.id}
+                  className={settings.model === option.id ? 'is-on' : ''}
                   onClick={() => {
-                    updateSettings({ model: option });
+                    updateSettings({ model: option.id });
                     setModelMenu(false);
                   }}
                 >
-                  {option}
-                  {settings.model === option ? ' ✓' : ''}
+                  {option.name}
+                  {settings.model === option.id ? ' ✓' : ''}
                 </button>
               ))}
             </div>

@@ -1,9 +1,23 @@
 import { z } from "zod";
+import {
+  ASSISTANT_DEFAULT_MODEL,
+  ASSISTANT_MODEL_IDS,
+  ASSISTANT_MODEL_REGISTRY,
+  type AssistantModelId,
+  type AssistantModelInfo,
+} from "@/lib/assistant-models";
 
 export const ASSISTANT_SETTINGS_CONFIG_KEY = "private:assistant_settings";
 export const ASSISTANT_SETTINGS_DESCRIPTION = "站长专属 AI 助理配置（含加密密钥，私有禁止公开读取）";
 
-export const ASSISTANT_MODELS = ["deepseek-flash", "deepseek-v4-pro"] as const;
+/** 模型 id 列表：唯一事实源在 @/lib/assistant-models，这里只做转发。 */
+export const ASSISTANT_MODELS = ASSISTANT_MODEL_IDS;
+export {
+  ASSISTANT_DEFAULT_MODEL,
+  ASSISTANT_MODEL_IDS,
+  ASSISTANT_MODEL_REGISTRY,
+};
+export type { AssistantModelId, AssistantModelInfo };
 export const ASSISTANT_EFFORTS = ["", "low", "medium", "high"] as const;
 export const ASSISTANT_PERSONAS = ["assistant", "coach", "tutor", "writer"] as const;
 export const ASSISTANT_REPLY_STYLES = [
@@ -66,7 +80,7 @@ export type AssistantTeamId = (typeof ASSISTANT_TEAM_IDS)[number];
 export interface AssistantPublicConfig {
   displayName: string;
   welcomeMessage: string;
-  model: string;
+  model: AssistantModelId;
   thinking: boolean;
   effort: AssistantEffort;
   webSearch: boolean;
@@ -83,7 +97,7 @@ export interface AssistantAdminSettingsView {
   displayName: string;
   welcomeMessage: string;
   baseUrl: string;
-  model: string;
+  model: AssistantModelId;
   maxTokens: number;
   systemPrompt: string;
   thinking: boolean;
@@ -119,7 +133,7 @@ export const DEFAULT_ASSISTANT_ADMIN_SETTINGS: Omit<
   displayName: "私人 AI 助理",
   welcomeMessage: "有什么可以帮你的？支持深度思考、联网检索与文档解析。",
   baseUrl: "https://api.deepseek.com",
-  model: "deepseek-flash",
+  model: ASSISTANT_DEFAULT_MODEL,
   maxTokens: 8192,
   systemPrompt: "",
   thinking: true,
@@ -178,10 +192,7 @@ export const assistantAdminSettingsInput = z
       .default(DEFAULT_ASSISTANT_ADMIN_SETTINGS.welcomeMessage),
     baseUrl: safeHttpUrl(DEFAULT_ASSISTANT_ADMIN_SETTINGS.baseUrl),
     model: z
-      .string()
-      .trim()
-      .min(1, "模型名称不能为空")
-      .max(80, "模型名称最多 80 个字符")
+      .enum(ASSISTANT_MODEL_IDS)
       .default(DEFAULT_ASSISTANT_ADMIN_SETTINGS.model),
     maxTokens: z.coerce
       .number()

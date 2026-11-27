@@ -11,6 +11,7 @@
 export type MediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
 import type { ToolSchema } from '../agent/types';
+import { ASSISTANT_DEFAULT_MODEL } from '@/lib/assistant-models';
 
 export type PersonaId = 'assistant' | 'coach' | 'tutor' | 'writer';
 
@@ -531,7 +532,7 @@ export const DEFAULT_SETTINGS: Settings = {
   welcomeMessage: '有什么可以帮你的？支持深度思考、联网检索与文档解析。',
   apiKey: '',
   baseUrl: 'https://api.deepseek.com',
-  model: 'deepseek-flash',
+  model: ASSISTANT_DEFAULT_MODEL,
   systemPrompt: '',
   thinking: true,
   effort: '',
